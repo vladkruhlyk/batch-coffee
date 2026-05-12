@@ -22,6 +22,10 @@ interface ButtonAsLink extends BaseProps {
   href: string;
   target?: string;
   rel?: string;
+  /** Fire alongside the navigation — useful for closing overlays
+   *  (e.g. cart drawer) on click. Not part of native <a>, but Next's
+   *  Link forwards it through to the underlying anchor. */
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 }
 
 type ButtonProps = ButtonAsButton | ButtonAsLink;
@@ -61,6 +65,7 @@ export const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonPr
           href={props.href}
           target={props.target}
           rel={props.rel}
+          onClick={props.onClick}
           className={classes}
         >
           {children}

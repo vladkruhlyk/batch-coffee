@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus, ShoppingBag, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { EASING } from "@/lib/easing";
 import { formatPrice, cn } from "@/lib/utils";
@@ -58,6 +59,20 @@ export function CartDrawer() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, closeCart]);
+
+  // Safety-net: auto-close when the route changes. Without this, clicking
+  // a navigating element inside the drawer leaves the drawer up over the
+  // new page — looks like "переход не работает" from the user's POV.
+  // Skip the very first render so opening the drawer on a stable route
+  // doesn't immediately close it.
+  const pathname = usePathname();
+  const prevPath = useRef(pathname);
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      if (open) closeCart();
+    }
+  }, [pathname, open, closeCart]);
 
   const subtotal = getCartSubtotal(items);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -157,6 +172,7 @@ export function CartDrawer() {
                   variant="primary"
                   size="lg"
                   className="mt-5 w-full justify-center"
+                  onClick={closeCart}
                 >
                   Оформити замовлення
                 </Button>

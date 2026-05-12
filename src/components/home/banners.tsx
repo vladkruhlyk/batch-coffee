@@ -1,0 +1,333 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Container } from "@/components/layout/container";
+import { EASING } from "@/lib/easing";
+import { cn } from "@/lib/utils";
+
+/**
+ * First-screen carousel — stacked layout.
+ *
+ * Each slide is a vertical card:
+ *
+ *   ┌──────────────────────────┐
+ *   │                          │
+ *   │       PHOTO / ART        │ ← top, ~16:9 area, image fills via object-cover
+ *   │                          │
+ *   ├──────────────────────────┤
+ *   │  Kicker                  │
+ *   │  Title                   │ ← cream/white text block, normal flow
+ *   │  Copy        [CTA]       │
+ *   └──────────────────────────┘
+ *
+ * Image area accepts a real photo (`image` field) — set the asset path and
+ * it renders via next/image. When `image` is undefined we fall back to the
+ * existing radial-gradient + splash-mark composition so the layout never
+ * collapses while photography is still being shot.
+ *
+ * Keep aspect ratios responsive: portrait phones get a more square-ish
+ * image (4:3) so the photo doesn't dominate the screen, while desktops
+ * get the wider 21:9 cinematic frame.
+ */
+
+interface Banner {
+  slug: string;
+  kicker: string;
+  titleLine1: string;
+  titleLine2: string;
+  copy: string;
+  ctaLabel: string;
+  ctaHref: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+  badge?: string;
+  /** URL to an uploaded image (Sanity) — when present, replaces the
+   *  gradient + splash placeholder. */
+  image?: string;
+  /** Tint used by both the gradient fallback AND the photo overlay. */
+  markTint: string;
+  /** Background color behind the image area for the gradient fallback. */
+  fallbackBg: string;
+}
+
+const AUTOPLAY_MS = 7000;
+
+interface HomeBannersProps {
+  /** Banners come from Sanity now — empty array renders nothing. The
+   *  homepage server component pre-fetches and hands them down. */
+  banners: Banner[];
+}
+
+export function HomeBanners({ banners }: HomeBannersProps) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const go = useCallback(
+    (n: number) => {
+      if (banners.length === 0) return;
+      setIndex(((n % banners.length) + banners.length) % banners.length);
+    },
+    [banners.length],
+  );
+
+  useEffect(() => {
+    if (paused || banners.length <= 1) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % banners.length);
+    }, AUTOPLAY_MS);
+    return () => window.clearInterval(id);
+  }, [paused, banners.length]);
+
+  // Empty state — editor hasn't published any banners yet. Don't render
+  // the whole section so the page doesn't have an awkward empty hero.
+  if (banners.length === 0) return null;
+
+  const active = banners[Math.min(index, banners.length - 1)];
+
+  return (
+    <section
+      className="relative bg-[var(--color-bg-primary)] pt-28 lg:pt-32 pb-12 lg:pb-16"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <Container size="wide">
+        <div className="overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)]">
+          {/* TOP — image. Crossfades between slides.
+              Height is capped against the viewport (svh) so the whole card
+              — image + text + controls — still fits inside the first screen
+              on typical desktop heights, while the image gets enough
+              presence to read as a hero. clamp() floor keeps it readable
+              on short windows / tablets in landscape. */}
+          <div
+            className="relative w-full h-[clamp(280px,50svh,560px)]"
+            style={{ backgroundColor: active.fallbackBg }}
+          >
+            <AnimatePresence mode="sync">
+              <motion.div
+                key={active.slug + "-image"}
+                initial={{ opacity: 0, scale: 1.04 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.02 }}
+                transition={{ duration: 1.1, ease: EASING.smooth }}
+                className="absolute inset-0"
+              >
+                {active.image ? (
+                  <Image
+                    src={active.image}
+                    alt={active.titleLine1}
+                    fill
+                    priority={index === 0}
+                    className="object-cover"
+                    sizes="(min-width: 1280px) 1200px, 100vw"
+                  />
+                ) : (
+                  <PlaceholderArt tint={active.markTint} />
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Top-left badge — sits over the image */}
+            <div className="absolute top-5 left-5 lg:top-7 lg:left-7 z-10">
+              <AnimatePresence mode="wait">
+                {active.badge && (
+                  <motion.span
+                    key={active.slug + "-badge"}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.5, ease: EASING.smooth }}
+                    className="inline-flex items-center text-[10px] tracking-[0.3em] uppercase rounded-full px-4 py-2 bg-white/85 backdrop-blur-md text-[var(--color-text-primary)] border border-white/60"
+                  >
+                    {active.badge}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Counter — over image, top-right */}
+            <span className="absolute top-5 right-5 lg:top-7 lg:right-7 z-10 inline-flex items-center font-display text-xs tabular-nums text-white/85 mix-blend-difference">
+              {String(index + 1).padStart(2, "0")}
+              <span className="mx-1 opacity-50">/</span>
+              <span className="opacity-50">
+                {String(banners.length).padStart(2, "0")}
+              </span>
+            </span>
+          </div>
+
+          {/* BOTTOM — text block. Cream surface. */}
+          <div className="relative bg-[var(--color-bg-primary)]">
+            <Container size="wide" className="!px-0">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={active.slug + "-content"}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.7, ease: EASING.smooth }}
+                  className="grid lg:grid-cols-12 gap-7 lg:gap-12 px-6 py-9 lg:px-12 lg:py-12"
+                >
+                  {/* LEFT — kicker + headline */}
+                  <div className="lg:col-span-7">
+                    <div className="flex items-center gap-4 mb-4">
+                      <span
+                        className="block w-10 h-px bg-[var(--color-text-primary)]/25"
+                        aria-hidden
+                      />
+                      <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-secondary)]">
+                        {active.kicker}
+                      </span>
+                    </div>
+                    <h1 className="font-display font-semibold text-[clamp(1.85rem,4.2vw,3.5rem)] leading-[1.03] tracking-[-0.04em] text-[var(--color-text-primary)]">
+                      {active.titleLine1}
+                      <span className="block font-medium text-[var(--color-text-secondary)]">
+                        {active.titleLine2}
+                      </span>
+                    </h1>
+                  </div>
+
+                  {/* RIGHT — copy + CTAs */}
+                  <div className="lg:col-span-5 lg:pt-3 flex flex-col gap-6">
+                    <p className="text-[var(--color-text-secondary)] text-base lg:text-[16px] leading-relaxed max-w-md">
+                      {active.copy}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-5 md:gap-7">
+                      <Link
+                        href={active.ctaHref}
+                        className="group inline-flex items-center gap-3 text-sm tracking-[0.12em] uppercase px-7 py-4 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] transition-opacity duration-300 hover:opacity-85"
+                      >
+                        {active.ctaLabel}
+                        <span className="inline-block transition-transform duration-500 ease-out group-hover:translate-x-1">
+                          →
+                        </span>
+                      </Link>
+                      {active.secondaryLabel && active.secondaryHref && (
+                        <Link
+                          href={active.secondaryHref}
+                          className="inline-flex text-sm tracking-[0.12em] uppercase pb-1 border-b border-[var(--color-text-primary)]/25 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
+                        >
+                          {active.secondaryLabel}
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </Container>
+          </div>
+        </div>
+
+        {/* CONTROLS — outside the card, below */}
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {banners.map((b, i) => (
+              <button
+                key={b.slug}
+                onClick={() => go(i)}
+                aria-label={`Слайд ${i + 1}`}
+                className="group h-6 flex items-center"
+              >
+                <span
+                  className={cn(
+                    "block h-px bg-[var(--color-text-primary)] transition-all duration-500",
+                    i === index
+                      ? "w-9 opacity-100"
+                      : "w-4 opacity-30 group-hover:opacity-60 group-hover:w-6",
+                  )}
+                  aria-hidden
+                />
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => go(index - 1)}
+              aria-label="Попередній слайд"
+              className="h-11 w-11 rounded-full border border-[var(--color-border-strong)] flex items-center justify-center text-[var(--color-text-primary)] hover:bg-[var(--color-text-primary)] hover:text-[var(--color-text-inverse)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={1.6} />
+            </button>
+            <button
+              onClick={() => go(index + 1)}
+              aria-label="Наступний слайд"
+              className="h-11 w-11 rounded-full border border-[var(--color-border-strong)] flex items-center justify-center text-[var(--color-text-primary)] hover:bg-[var(--color-text-primary)] hover:text-[var(--color-text-inverse)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
+            >
+              <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
+            </button>
+          </div>
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+/**
+ * Fallback art used while real banner photography hasn't been shot yet.
+ * Same vibe as before — radial highlight + grain + splash mark — just
+ * scoped into its own component so the new layout's image area can swap
+ * cleanly to a real `<Image>` when assets land.
+ *
+ * The splash mark uses a motion wrapper that runs an entrance animation
+ * (rotate + scale) on mount. Because the parent <AnimatePresence> in
+ * `HomeBanners` keys the image layer on `active.slug`, this whole component
+ * is re-mounted at each slide change — so the rotation replays every time.
+ */
+function PlaceholderArt({ tint }: { tint: string }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      {/* Radial highlight */}
+      <div
+        className="absolute inset-0 opacity-70"
+        style={{
+          backgroundImage: `radial-gradient(ellipse at 75% 35%, ${hexToRgba(tint, 0.22)} 0%, transparent 60%)`,
+        }}
+      />
+      {/* Grain */}
+      <div
+        className="absolute inset-0 opacity-[0.07] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        }}
+      />
+      {/* Splash mark — animated on each slide enter (parent re-mounts us). */}
+      <motion.div
+        initial={{ rotate: -22, scale: 0.92, opacity: 0 }}
+        animate={{ rotate: 0, scale: 1, opacity: 0.32 }}
+        transition={{
+          rotate: { duration: 1.6, ease: EASING.smooth },
+          scale: { duration: 1.6, ease: EASING.smooth },
+          opacity: { duration: 1.1, ease: EASING.smooth },
+        }}
+        className="absolute -top-[10%] -right-[8%] w-[55%] max-w-[480px] aspect-square"
+        style={{
+          backgroundColor: tint,
+          WebkitMaskImage: "url(/5.png)",
+          maskImage: "url(/5.png)",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+          // Pin the rotation around the visual center of the petals so the
+          // motion reads like it's spinning in place, not arcing off-screen.
+          transformOrigin: "55% 55%",
+        }}
+      />
+    </div>
+  );
+}
+
+/** "#8A4A26" → "rgba(138,74,38,0.22)". Tiny helper, no validation. */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}

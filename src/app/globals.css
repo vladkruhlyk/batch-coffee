@@ -1,26 +1,225 @@
 @import "tailwindcss";
 
+/* ============================================
+   BATCH Coffee — Design Tokens
+   Canyon-inspired warm palette
+   ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Background — onelove-style lighter, whiter palette. Warm undertones kept
+     minimal so the overall feel is bright and editorial. */
+  --color-bg-primary: #FFFFFF;      /* pure white, main bg */
+  --color-bg-secondary: #F7F5F1;    /* very light cream, secondary blocks */
+  --color-bg-surface: #FFFFFF;      /* cards */
+  --color-bg-dark: #1A1612;         /* warm black — used sparingly now (footer, dark ribbon) */
+
+  /* Text */
+  --color-text-primary: #1A1612;    /* warm black, NOT #000 */
+  --color-text-secondary: #6B6660;  /* warm gray */
+  --color-text-muted: #A8A29A;      /* lighter gray — bumped for contrast on pure white */
+  --color-text-inverse: #FFFFFF;    /* on dark bg */
+
+  /* Borders — softer on white */
+  --color-border-default: #EBE7DF;  /* very light sand */
+  --color-border-strong: #D9D2C4;   /* sand */
+
+  /* Accent (placeholder — waits for branding) */
+  --color-accent: #2B1F15;          /* dark espresso */
+  --color-accent-hover: #3D2817;
+
+  /* Section spacing */
+  --section-gap: clamp(5rem, 10vw, 10rem);
+  --section-gap-sm: clamp(3rem, 6vw, 5rem);
+
+  /* Radius scale — brand reads as soft/rounded everywhere.
+     Map to the splash mark's pebble-shaped petals. */
+  --radius-sm: 0.625rem;   /* 10px — small chips, inputs */
+  --radius-md: 1rem;       /* 16px — buttons if not pill */
+  --radius-lg: 1.5rem;     /* 24px — product cards, small tiles */
+  --radius-xl: 2rem;       /* 32px — large tiles, feature cards */
+  --radius-2xl: 2.75rem;   /* 44px — hero / banner frames */
+  --radius-pill: 9999px;   /* pills / buttons */
 }
 
+/* Tailwind v4 — register tokens as utilities (bg-primary, text-secondary, etc.) */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-primary: var(--color-bg-primary);
+  --color-bg-secondary: var(--color-bg-secondary);
+  --color-bg-surface: var(--color-bg-surface);
+  --color-bg-dark: var(--color-bg-dark);
+
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-inverse: var(--color-text-inverse);
+
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+
+  /* Fonts registered as CSS variables via next/font in layout.tsx */
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================
+   Base styles
+   ============================================ */
+
+html {
+  /* Lenis needs this to take over smooth scroll properly */
+  scroll-behavior: auto;
+  /* Kill the macOS trackpad horizontal-swipe = browser back/forward gesture.
+     Critical for pages with horizontal scroll components (e.g. the featured
+     coffee carousel) — otherwise a sideways flick at the edge yanks the user
+     back through history. `none` also disables the rubber-band bounce on X. */
+  overscroll-behavior-x: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-feature-settings: "ss01", "ss02";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), "Inter", system-ui, sans-serif;
+  letter-spacing: -0.02em; /* SN Pro is humanist — needs only mild negative tracking */
+  line-height: 1;
+  font-weight: 500;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-text-primary);
+  color: var(--color-bg-primary);
+}
+
+/* Focus — wrapped in @layer base so per-element Tailwind overrides
+   (`focus-visible:outline-none` on the global search input, for instance)
+   actually win the cascade. Unlayered rules outrank @layer utilities,
+   which is why this needs to live inside a layer. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-text-primary);
+    outline-offset: 3px;
+  }
+}
+
+/* Dual-thumb range slider — used by the catalog price filter. The two
+   inputs share a track; we hide native styling and re-enable pointer
+   events only on the thumb pseudo-elements so empty bits of the rail
+   don't intercept clicks meant for the underlying decorative track. */
+.batch-range-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+  outline: none;
+}
+.batch-range-input::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+  height: 100%;
+}
+.batch-range-input::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 100%;
+}
+.batch-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--color-text-primary);
+  border: 2px solid var(--color-bg-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: grab;
+  /* Re-anchor the thumb to the center of the 24px-tall input row so it
+     visually lines up with the 2px rail. */
+  margin-top: 0;
+  transition: transform 0.18s ease;
+}
+.batch-range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.08);
+}
+.batch-range-input::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.1);
+}
+.batch-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--color-text-primary);
+  border: 2px solid var(--color-bg-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: grab;
+  transition: transform 0.18s ease;
+}
+.batch-range-input::-moz-range-thumb:hover {
+  transform: scale(1.08);
+}
+.batch-range-input::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.1);
+}
+/* Focus ring on the thumb only — the global :focus-visible outline would
+   otherwise circle the entire transparent track. */
+.batch-range-input:focus-visible {
+  outline: none;
+}
+.batch-range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.18);
+}
+.batch-range-input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.18);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Lenis smooth scroll base styles */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Container } from "./container";
+import { fetchSiteSettings } from "@/sanity/lib/fetchers";
 
 const SHOP_LINKS = [
   { label: "Уся кава", href: "/shop" },
@@ -26,13 +27,28 @@ const ACCOUNT_LINKS = [
   { label: "Контакти", href: "/contacts" },
 ];
 
-const SOCIAL_LINKS = [
-  { label: "Instagram", href: "https://instagram.com" },
-  { label: "Telegram", href: "https://t.me" },
-  { label: "Facebook", href: "https://facebook.com" },
-];
+/**
+ * Site footer. Server component — fetches global site settings from
+ * Sanity (contacts, social links) on render. Settings are cached at the
+ * fetcher level so 20+ pages mounting Footer don't fan out 20 requests.
+ */
+export async function Footer() {
+  const settings = await fetchSiteSettings();
+  const socialLinks = [
+    settings.instagram && {
+      label: "Instagram",
+      href: settings.instagram,
+    },
+    settings.telegram && {
+      label: "Telegram",
+      href: settings.telegram,
+    },
+    settings.facebook && {
+      label: "Facebook",
+      href: settings.facebook,
+    },
+  ].filter((l): l is { label: string; href: string } => Boolean(l));
 
-export function Footer() {
   return (
     <footer className="bg-[var(--color-bg-dark)] text-[var(--color-text-inverse)]">
       <Container size="wide">
@@ -136,18 +152,22 @@ export function Footer() {
                 Соцмережі
               </h3>
               <ul className="flex flex-col gap-3">
-                {SOCIAL_LINKS.map((link) => (
-                  <li key={link.href}>
-                    <a
-                      href={link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm hover:opacity-60 transition-opacity duration-300"
-                    >
-                      {link.label} →
-                    </a>
-                  </li>
-                ))}
+                {socialLinks.length === 0 ? (
+                  <li className="text-sm text-white/30">— ще не задано</li>
+                ) : (
+                  socialLinks.map((link) => (
+                    <li key={link.href}>
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm hover:opacity-60 transition-opacity duration-300"
+                      >
+                        {link.label} →
+                      </a>
+                    </li>
+                  ))
+                )}
               </ul>
             </div>
           </div>

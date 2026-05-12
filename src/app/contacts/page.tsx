@@ -8,6 +8,7 @@ import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SectionKicker } from "@/components/layout/section-kicker";
+import { fetchSiteSettings } from "@/sanity/lib/fetchers";
 
 export const metadata: Metadata = {
   title: "Контакти — BATCH Coffee",
@@ -15,12 +16,21 @@ export const metadata: Metadata = {
     "Адреса кавʼярні, телефон, соцмережі та графік роботи BATCH Coffee Roastery.",
 };
 
+export const revalidate = 60;
+
 /**
  * Contacts — single-page directory: address + map placeholder, phone, email,
- * socials, hours. Light form left out for now; the FAQ + email links are
- * usually enough at this stage. Form goes in when Resend is wired.
+ * socials, hours. Address / phone / email come from Sanity SiteSettings so
+ * the editor can keep them in sync with the footer + checkout copy.
  */
-export default function ContactsPage() {
+export default async function ContactsPage() {
+  const settings = await fetchSiteSettings();
+  // Instagram handle for display ("@batch.coffee") — derive from URL or
+  // fall back to a clean placeholder so the row never reads "undefined".
+  const instagramHandle = settings.instagram
+    ? "@" + settings.instagram.replace(/https?:\/\/(www\.)?instagram\.com\//, "").replace(/\/$/, "")
+    : null;
+
   return (
     <>
       <Header />
@@ -72,9 +82,8 @@ export default function ContactsPage() {
                     Кавʼярня та обсмажник
                   </span>
                   <h2 className="mt-3 font-display text-3xl lg:text-4xl font-semibold tracking-[-0.025em]">
-                    Велика Васильківська, 24
+                    {settings.address}
                   </h2>
-                  <p className="mt-2 text-white/85">Київ, 01004</p>
                 </div>
               </div>
 
@@ -85,39 +94,50 @@ export default function ContactsPage() {
               </p>
             </div>
 
-            {/* Contact list */}
+            {/* Contact list — every row comes from Sanity. Telegram /
+                Facebook are only rendered when the editor has supplied a
+                URL, so the list stays clean. */}
             <div className="lg:col-span-5 flex flex-col gap-3">
               <ContactRow
                 icon={<MapPin className="h-4 w-4" />}
                 label="Адреса"
-                primary="Велика Васильківська, 24"
-                secondary="Київ, 01004"
+                primary={settings.address}
               />
               <ContactRow
                 icon={<Clock className="h-4 w-4" />}
                 label="Графік"
-                primary="Пн–Нд · 08:00–22:00"
-                secondary="Кухня до 21:30 · Самовивіз до 22:00"
+                primary={settings.hours}
               />
               <ContactRow
                 icon={<Phone className="h-4 w-4" />}
                 label="Телефон"
-                primary="+380 (50) 123-45-67"
-                href="tel:+380501234567"
+                primary={settings.contactPhone}
+                href={`tel:${settings.contactPhone.replace(/\s/g, "")}`}
               />
               <ContactRow
                 icon={<Send className="h-4 w-4" />}
                 label="Email"
-                primary="hello@batch.coffee"
-                href="mailto:hello@batch.coffee"
+                primary={settings.contactEmail}
+                href={`mailto:${settings.contactEmail}`}
               />
-              <ContactRow
-                icon={<ArrowUpRight className="h-4 w-4" />}
-                label="Instagram"
-                primary="@batch.coffee"
-                href="https://instagram.com/batch.coffee"
-                external
-              />
+              {settings.instagram && (
+                <ContactRow
+                  icon={<ArrowUpRight className="h-4 w-4" />}
+                  label="Instagram"
+                  primary={instagramHandle ?? settings.instagram}
+                  href={settings.instagram}
+                  external
+                />
+              )}
+              {settings.telegram && (
+                <ContactRow
+                  icon={<ArrowUpRight className="h-4 w-4" />}
+                  label="Telegram"
+                  primary={settings.telegram.replace(/https?:\/\/(t\.me|telegram\.me)\//, "@")}
+                  href={settings.telegram}
+                  external
+                />
+              )}
             </div>
           </div>
 

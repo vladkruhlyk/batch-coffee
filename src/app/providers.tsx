@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { CartFlyLayer } from "@/components/cart/cart-fly-layer";
+import { CookieBanner } from "@/components/layout/cookie-banner";
 import { LoaderOverlay } from "@/components/layout/loader-overlay";
 import {
   SearchHotkeys,
@@ -65,6 +66,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <CartFlyLayer />
         <SearchOverlay />
         <SearchHotkeys />
+        <CookieBanner />
       </QueryClientProvider>
     </ReactLenis>
   );

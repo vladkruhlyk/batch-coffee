@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -32,7 +33,21 @@ import { cn } from "@/lib/utils";
  * already fire-and-forget async, so swapping to Supabase signInWithOtp /
  * verifyOtp later requires no UI changes here.
  */
+/**
+ * Top-level page — wraps the inner component in <Suspense> so Next.js
+ * can statically prerender this route. `useSearchParams()` inside
+ * `LoginInner` is a CSR-only API; without the Suspense boundary the
+ * static build pass throws.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const nextHref = params.get("next") ?? "/account";

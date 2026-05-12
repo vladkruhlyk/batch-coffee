@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Calendar, Check, Pause, Play, Repeat, Settings2, XOctagon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSubscription, type Subscription } from "@/lib/subscription-store";
@@ -28,7 +28,21 @@ const INTERVAL_OPTIONS = [
  * pause, change schedule, cancel — already live as local state here so
  * we can wire them to real mutations without UI changes.
  */
+/**
+ * Top-level page — wraps the inner component in <Suspense> so Next.js
+ * can statically prerender this route. `useSearchParams()` inside
+ * `SubscriptionsInner` is a CSR-only API; the static build pass throws
+ * without the boundary.
+ */
 export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionsInner />
+    </Suspense>
+  );
+}
+
+function SubscriptionsInner() {
   const sub = useSubscription((s) => s.current);
   const hydrated = useSubscription((s) => s.hydrated);
   const storeTogglePause = useSubscription((s) => s.togglePause);

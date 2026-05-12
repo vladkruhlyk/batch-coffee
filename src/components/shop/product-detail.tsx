@@ -231,10 +231,24 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </div>
           )}
 
-          {/* Weight variants */}
+          {/* Weight / quantity variants. The label adapts so the section
+              reads naturally per category: coffee in bags → "Вага", drip
+              packs / capsules → "Кількість", gear / grinders / gifts →
+              "Варіант". */}
           <div className="mt-10">
             <h3 className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] mb-4">
-              Вага
+              {(() => {
+                switch (product.category) {
+                  case "beans":
+                  case "ground":
+                    return "Вага";
+                  case "drip":
+                  case "capsules":
+                    return "Кількість";
+                  default:
+                    return "Варіант";
+                }
+              })()}
             </h3>
             <div className="flex flex-wrap gap-2">
               {product.weights.map((w, i) => {
@@ -387,9 +401,27 @@ export function ProductDetail({ product }: ProductDetailProps) {
             Купити
           </Button>
 
-          <p className="mt-6 text-xs tracking-[0.15em] uppercase text-[var(--color-text-muted)]">
-            Обсмажено цього тижня · Доставка 1–2 дні
-          </p>
+          {/* Bottom strapline — adapts to category. "Obsmazheno tsoho
+              tyzhnia" only makes sense for coffee SKUs (beans / ground /
+              drip / capsules); grinders, gear and gifts get a generic
+              shipping note instead. Detection mirrors the same predicate
+              we use in the data layer so it stays in sync. */}
+          {(() => {
+            const coffeeCategories = new Set([
+              "beans",
+              "ground",
+              "drip",
+              "capsules",
+            ]);
+            const isCoffee = coffeeCategories.has(product.category);
+            return (
+              <p className="mt-6 text-xs tracking-[0.15em] uppercase text-[var(--color-text-muted)]">
+                {isCoffee
+                  ? "Обсмажено цього тижня · Доставка 1–2 дні"
+                  : "Відправка день у день · Доставка 1–2 дні"}
+              </p>
+            );
+          })()}
         </div>
       </div>
 

@@ -152,12 +152,16 @@ export function ProductCard({ product }: ProductCardProps) {
             card on narrow grids. */}
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2 min-w-0">
+            {/* Price stack — wholesale puts the retail figure on its own
+                line below so the row never outgrows the card width.
+                Without stacking, 12kg-level prices (5 digits each side)
+                crash into the stepper. */}
+            <div className="flex flex-col min-w-0 leading-none">
               <span className="font-display text-xl font-semibold tabular-nums tracking-tight">
                 {formatPrice(displayPrice)}
               </span>
               {wholesaleTotal && (
-                <span className="text-xs text-[var(--color-text-muted)] line-through tabular-nums">
+                <span className="mt-1 text-[11px] text-[var(--color-text-muted)] line-through tabular-nums">
                   {formatPrice(retailTotal)}
                 </span>
               )}

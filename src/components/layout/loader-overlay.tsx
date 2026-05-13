@@ -25,11 +25,19 @@ const LAST_FRAME = 5;
 // One tick = one new petal. Frames cross-fade over CROSSFADE_MS, which is
 // slightly less than the tick so each frame fully resolves before the next
 // starts coming in (avoids a perpetual ghost-overlap that reads as muddy).
-const FRAME_INTERVAL_MS = 650;
-const CROSSFADE_MS = 600;
-const HOLD_AFTER_LAST_MS = 700;
-const FADE_OUT_MS = 900;
-const SESSION_KEY = "batch-loader-shown";
+//
+// Original timing totalled ~4.2s and made the site feel slow to first-time
+// visitors. The new values bring it down to ~1.5s — enough for the brand
+// flourish to register, not so long that users wait.
+const FRAME_INTERVAL_MS = 220;
+const CROSSFADE_MS = 200;
+const HOLD_AFTER_LAST_MS = 200;
+const FADE_OUT_MS = 450;
+// Use `localStorage` (not session): show the splash exactly once per
+// browser — returning visitors get the site instantly. New visitors get
+// the brand moment once and never see it again. Closing the tab and
+// reopening counted as a new session before, which felt annoying.
+const STORAGE_KEY = "batch-loader-shown-v2";
 
 // Standard "expo out" easing — fast then settles. Matches the rest of the site.
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -43,7 +51,7 @@ export function LoaderOverlay() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (sessionStorage.getItem(SESSION_KEY)) {
+    if (localStorage.getItem(STORAGE_KEY)) {
       setShow(false);
       return;
     }
@@ -61,7 +69,7 @@ export function LoaderOverlay() {
         // Mark only AFTER completion so React StrictMode's double-mount in
         // dev doesn't trip the early-return on remount and skip the splash.
         window.setTimeout(() => {
-          sessionStorage.setItem(SESSION_KEY, "1");
+          localStorage.setItem(STORAGE_KEY, "1");
           setShow(false);
         }, HOLD_AFTER_LAST_MS);
         return;

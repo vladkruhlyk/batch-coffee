@@ -19,6 +19,11 @@ import { Button } from "@/components/ui/button";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 import { useAddToCart } from "@/lib/use-add-to-cart";
+import {
+  getWholesalePerKg,
+  WHOLESALE_MIN_KG,
+  WHOLESALE_DISCOUNT_PERCENT,
+} from "@/lib/wholesale";
 import type { GrindOption, Product } from "@/data/products";
 
 interface ProductDetailProps {
@@ -389,6 +394,33 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </span>
             <QuantityStepper value={quantity} onChange={setQuantity} />
           </div>
+
+          {/* Wholesale price callout — shown only for coffee SKUs with a
+              1kg variant. Dark editorial card so it reads as a different
+              offer tier without competing with the primary buy button. */}
+          {(() => {
+            const wholesale = getWholesalePerKg(product);
+            if (!wholesale) return null;
+            return (
+              <div className="mt-5 flex items-center justify-between gap-4 rounded-[var(--radius-lg)] bg-[var(--color-bg-dark)] text-[var(--color-text-inverse)] px-5 py-4">
+                <div>
+                  <p className="text-[10px] tracking-[0.3em] uppercase text-white/55">
+                    Гуртова ціна
+                  </p>
+                  <p className="mt-1 text-sm text-white/85">
+                    від {WHOLESALE_MIN_KG} кг · −
+                    {WHOLESALE_DISCOUNT_PERCENT}%
+                  </p>
+                </div>
+                <p className="font-display text-2xl lg:text-3xl font-semibold tabular-nums">
+                  {formatPrice(wholesale)}
+                  <span className="ml-1 text-xs font-medium text-white/55">
+                    /кг
+                  </span>
+                </p>
+              </div>
+            );
+          })()}
 
           <Button
             ref={primaryCtaRef}

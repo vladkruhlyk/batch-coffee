@@ -6,6 +6,7 @@ import { ShoppingBag } from "lucide-react";
 import { useState } from "react";
 import { TasteMeters } from "./taste-meters";
 import { QuantityStepper } from "./quantity-stepper";
+import { getWholesalePerKg, WHOLESALE_MIN_KG } from "@/lib/wholesale";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 import { useAddToCart } from "@/lib/use-add-to-cart";
@@ -129,11 +130,28 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
+        {/* Wholesale hint — small editorial line, only for coffee SKUs
+            with a 1kg variant. Sits above the main price row so it
+            informs the buyer before they commit to a single bag. */}
+        {(() => {
+          const wholesale = getWholesalePerKg(product);
+          if (!wholesale) return null;
+          return (
+            <div className="mt-auto -mb-1 inline-flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-[var(--color-text-muted)]">
+              <span>Гурт від {WHOLESALE_MIN_KG} кг</span>
+              <span aria-hidden>·</span>
+              <span className="font-display text-[11px] font-semibold tabular-nums text-[var(--color-text-primary)] tracking-normal">
+                {formatPrice(wholesale)}/кг
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Price + qty + add. The qty stepper sits between the price and
             the cart button so the eye reads "ціна × кількість → додати"
             left-to-right. Compact size keeps the row from outgrowing the
             card on narrow grids. */}
-        <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+        <div className="mt-2 flex items-center justify-between gap-3 pt-2">
           <span className="font-display text-xl font-semibold tabular-nums tracking-tight">
             {formatPrice(weight.price * quantity)}
           </span>

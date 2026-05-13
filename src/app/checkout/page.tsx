@@ -52,7 +52,11 @@ export default function CheckoutPage() {
   const [agreed, setAgreed] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Pre-fill phone from auth — only after hydration so we don't fight SSR.
+  // Pre-fill the form when the auth-store hydrates with a real user.
+  // This is a legitimate use of useEffect: we're syncing local form
+  // state to an external store after async load. Form deps deliberately
+  // omitted — pre-fill fires once, then user edits take over.
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     if (hydrated && user) {
       if (!phone) setPhone(formatPhone(user.phone));
@@ -60,10 +64,8 @@ export default function CheckoutPage() {
       if (!lastName && user.lastName) setLastName(user.lastName);
       if (!email && user.email) setEmail(user.email);
     }
-    // We deliberately omit the form deps — pre-fill should fire once after
-    // hydration, then user edits take over.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const subtotal = getCartSubtotal(items);
   const eligibleFree = subtotal >= FREE_SHIPPING_THRESHOLD;

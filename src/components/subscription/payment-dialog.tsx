@@ -47,7 +47,9 @@ export function PaymentDialog({
   const [submitting, setSubmitting] = useState(false);
 
   // Reset state when dialog reopens so prior aborted attempts don't leak
-  // partial input into the next session.
+  // partial input into the next session. Tied to `open` flipping
+  // false→true — exactly the moment we want a fresh form.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
       setNumber("");
@@ -57,6 +59,7 @@ export function PaymentDialog({
       setSubmitting(false);
     }
   }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -36,8 +36,11 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Re-hydrate form when user changes (e.g. on first hydration). Without
-  // this, swapping accounts in the same tab would leave the old values.
+  // Re-hydrate form when the auth-store user changes (e.g. once
+  // localStorage rehydrates after first paint). Legitimate sync-from-
+  // external-store pattern; lint warns conservatively about
+  // setState-in-effect but here it's the right shape.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (user) {
       setFirstName(user.firstName ?? "");
@@ -46,6 +49,7 @@ export default function ProfilePage() {
       setNewsletter(user.newsletter ?? true);
     }
   }, [user]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!user) return null;
 

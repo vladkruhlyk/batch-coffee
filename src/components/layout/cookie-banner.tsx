@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { EASING } from "@/lib/easing";
 
@@ -22,15 +22,13 @@ const STORAGE_KEY = "batch-cookie-consent";
  * we'll add a "Manage cookies" link in the footer that wipes localStorage.
  */
 export function CookieBanner() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    // First mount only — server doesn't have localStorage so we read
-    // here, then decide if the banner should appear.
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) setVisible(true);
-  }, []);
+  // Lazy init reads localStorage during the very first render. SSR sees
+  // `false`; the client hydrates with the real value. Avoids setState
+  // inside useEffect, which React 19 lint forbids.
+  const [visible, setVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !window.localStorage.getItem(STORAGE_KEY);
+  });
 
   const accept = () => {
     window.localStorage.setItem(STORAGE_KEY, "accepted");
@@ -76,7 +74,7 @@ export function CookieBanner() {
                 </button>
               </div>
               <p className="mt-3 text-sm text-white/80 leading-relaxed">
-                Ми використовуємо cookies щоб запам'ятати твій кошик і
+                Ми використовуємо cookies щоб запамʼятати твій кошик і
                 сесію в кабінеті. Без рекламних трекерів, без передачі
                 третім особам. Детальніше — в{" "}
                 <Link

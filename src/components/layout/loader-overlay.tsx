@@ -43,18 +43,20 @@ const STORAGE_KEY = "batch-loader-shown-v2";
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export function LoaderOverlay() {
-  // Start visible to avoid a flash of the page before the splash mounts.
-  // Hidden again immediately if this session has already seen it.
-  const [show, setShow] = useState(true);
+  // Read persisted state during render via lazy init — avoids the
+  // setState-in-effect anti-pattern (and saves a render). `typeof
+  // window` guard keeps SSR happy.
+  const [show, setShow] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return !localStorage.getItem(STORAGE_KEY);
+  });
   const [frame, setFrame] = useState(FIRST_FRAME);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    if (localStorage.getItem(STORAGE_KEY)) {
-      setShow(false);
-      return;
-    }
+    // Already-shown shortcut handled by the initializer above; here
+    // we just bail without animating.
+    if (!show) return;
 
     // Lock body scroll while splash is up.
     const prevOverflow = document.body.style.overflow;

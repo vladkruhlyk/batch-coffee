@@ -175,7 +175,10 @@ function AddressForm({
   onCancel: () => void;
   onSubmit: (addr: MockAddress) => void;
 }) {
-  const [form, setForm] = useState<MockAddress>(
+  // `Date.now()` inside the useState arg would be called during render —
+  // React 19 flags it as "impure during render". Wrap in a lazy initializer
+  // so it runs exactly once when the component mounts.
+  const [form, setForm] = useState<MockAddress>(() =>
     initial ?? {
       id: `addr-${Date.now()}`,
       label: "Дім",

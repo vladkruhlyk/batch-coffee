@@ -30,8 +30,10 @@ interface ButtonAsLink extends BaseProps {
 
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
+// Active-state pulls the button 1% inward so the tap registers
+// immediately — no waiting for navigation / network for visual feedback.
 const base =
-  "inline-flex items-center justify-center gap-2 font-sans text-sm tracking-wide transition-all duration-300 ease-out disabled:opacity-40 disabled:pointer-events-none rounded-full";
+  "inline-flex items-center justify-center gap-2 font-sans text-sm tracking-wide transition-all duration-300 ease-out active:scale-[0.98] active:duration-75 disabled:opacity-40 disabled:pointer-events-none rounded-full";
 
 const variants: Record<Variant, string> = {
   primary:

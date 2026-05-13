@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -92,6 +93,18 @@ export function SearchOverlay() {
       document.body.style.overflow = prev;
     };
   }, [open]);
+
+  // Safety-net: auto-close on any route change. Most overlay links already
+  // call `closeSearch` via onPick, but any future Link added inside the
+  // overlay would otherwise leave it stuck open after navigation.
+  const pathname = usePathname();
+  const prevPath = useRef(pathname);
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      if (open) closeSearch();
+    }
+  }, [pathname, open, closeSearch]);
 
   // Keyboard — ↑/↓/Enter/Escape.
   useEffect(() => {

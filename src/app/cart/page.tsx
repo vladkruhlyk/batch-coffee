@@ -7,17 +7,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
 import {
   useCart,
   getCartSubtotal,
   getCartCount,
   type CartItem,
 } from "@/lib/cart-store";
+import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
-
-const FREE_SHIPPING_THRESHOLD = 800;
-const DELIVERY_BASE = 80;
 
 /**
  * Cart page — full-page review of the basket before checkout.
@@ -102,10 +101,14 @@ export default function CartPage() {
             <div className="grid lg:grid-cols-12 gap-8 lg:gap-12">
               {/* Items list */}
               <div className="lg:col-span-8">
-                {/* Free-shipping nudge */}
-                {!eligibleForFreeShipping && (
-                  <ShippingNudge missing={toFreeShipping} />
-                )}
+                {/* Free-shipping nudge — always shown so the user sees
+                    the threshold and the success state both. The
+                    component handles its own conditional copy. */}
+                <FreeShippingProgress
+                  amount={subtotal - discount}
+                  variant="card"
+                  className="mb-5"
+                />
 
                 <ul className="flex flex-col gap-3">
                   <AnimatePresence initial={false}>
@@ -341,33 +344,9 @@ function CartLine({
   );
 }
 
-function ShippingNudge({ missing }: { missing: number }) {
-  const percent = Math.max(
-    0,
-    Math.min(100, ((FREE_SHIPPING_THRESHOLD - missing) / FREE_SHIPPING_THRESHOLD) * 100),
-  );
-  return (
-    <div className="mb-5 rounded-[var(--radius-lg)] bg-[var(--color-bg-secondary)] px-5 py-4">
-      <p className="text-sm">
-        Додай ще{" "}
-        <span className="font-display font-semibold tabular-nums">
-          {formatPrice(missing)}
-        </span>{" "}
-        — і доставка{" "}
-        <span className="text-[var(--color-text-primary)] font-medium">
-          безкоштовно
-        </span>
-        .
-      </p>
-      <div className="mt-3 h-1 rounded-full bg-[var(--color-border-strong)] overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[var(--color-text-primary)] transition-[width] duration-500"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+/* Old `ShippingNudge` removed — replaced by the shared
+ * `<FreeShippingProgress />` component so cart, drawer, and checkout
+ * all show the same nudge in the same place. */
 
 function EmptyState() {
   return (

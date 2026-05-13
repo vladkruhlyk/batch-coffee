@@ -265,7 +265,7 @@ export default function SubscriptionSetupPage() {
                   />
                   <Benefit
                     title="Безкоштовна доставка"
-                    sub="Від 500 ₴ замовлення"
+                    sub="Від 3 500 ₴ замовлення"
                   />
                 </ul>
               </section>

@@ -7,15 +7,15 @@ import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
 import { useCart, getCartSubtotal } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
+import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
 
 type DeliveryMethod = "novaposhta-branch" | "novaposhta-postomat" | "pickup";
 type PaymentMethod = "card" | "cod"; // card via LiqPay, cod = on delivery
 
-const FREE_SHIPPING_THRESHOLD = 800;
-const DELIVERY_BASE = 80;
 const PICKUP_FEE = 0;
 
 /**
@@ -363,7 +363,17 @@ export default function CheckoutPage() {
                   ))}
                 </ul>
 
-                <dl className="mt-6 pt-5 border-t border-[var(--color-border-default)] flex flex-col gap-2 text-sm">
+                {/* Free-shipping progress in compact form — appears
+                    between item list and the price breakdown so the
+                    user sees the threshold one last time before
+                    confirming. Hidden on pickup since it doesn't apply. */}
+                {delivery !== "pickup" && (
+                  <div className="mt-5 pt-5 border-t border-[var(--color-border-default)]">
+                    <FreeShippingProgress amount={subtotal} variant="compact" />
+                  </div>
+                )}
+
+                <dl className="mt-5 pt-5 border-t border-[var(--color-border-default)] flex flex-col gap-2 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-[var(--color-text-secondary)]">
                       Товари

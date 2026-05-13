@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
 import { EASING } from "@/lib/easing";
 import { formatPrice, cn } from "@/lib/utils";
 import {
@@ -156,6 +157,13 @@ export function CartDrawer() {
             {/* Footer */}
             {!isEmpty && (
               <footer className="border-t border-[var(--color-border-default)] px-6 py-6 lg:px-8 lg:py-7">
+                {/* Free-shipping nudge — compact strip so the drawer's
+                    vertical real estate stays focused on the CTA. */}
+                <FreeShippingProgress
+                  amount={subtotal}
+                  variant="compact"
+                  className="mb-5"
+                />
                 <div className="flex items-baseline justify-between">
                   <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
                     Підсумок

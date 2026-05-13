@@ -65,7 +65,7 @@ export default function DeliveryPage() {
                 icon={<Truck className="h-4 w-4" />}
                 title="Нова Пошта — відділення"
                 price="80 ₴"
-                free="Безкоштовно від 800 ₴"
+                free="Безкоштовно від 3 500 ₴"
                 duration="1-2 дні"
                 body="Найпопулярніший варіант. Доставляємо на будь-яке відділення в Україні. Заберти можна впродовж 5 днів."
               />
@@ -73,7 +73,7 @@ export default function DeliveryPage() {
                 icon={<PackageCheck className="h-4 w-4" />}
                 title="Нова Пошта — поштомат"
                 price="80 ₴"
-                free="Безкоштовно від 800 ₴"
+                free="Безкоштовно від 3 500 ₴"
                 duration="1-2 дні"
                 body="Великих міст. Зручно якщо не любиш черги — забираєш цілодобово за QR-кодом з SMS."
               />

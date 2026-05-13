@@ -57,7 +57,26 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const activeWeight = product.weights[weightIndex];
   const activeRoast = product.roasts?.[roastIndex];
   const hasRoasts = (product.roasts?.length ?? 0) > 0;
-  const totalPrice = activeWeight.price * quantity;
+  const retailTotal = activeWeight.price * quantity;
+
+  // Wholesale derived state — same logic as the product card. When
+  // weight × qty crosses 3kg on a kilo-pack SKU, the customer gets the
+  // wholesale per-kilo rate and the headline price drops accordingly.
+  const wholesalePerKg = getWholesalePerKg(product);
+  const currentKg = (activeWeight.grams * quantity) / 1000;
+  const wholesaleActive =
+    wholesalePerKg !== null && currentKg >= WHOLESALE_MIN_KG;
+  const wholesaleTotal = wholesaleActive
+    ? Math.round(wholesalePerKg! * currentKg)
+    : null;
+  const totalPrice = wholesaleTotal ?? retailTotal;
+  const wholesaleSavings = wholesaleTotal ? retailTotal - wholesaleTotal : 0;
+  // How much more weight the user needs to add to unlock the discount.
+  // Only computed when wholesale is available and not yet active.
+  const kgToWholesale =
+    wholesalePerKg && !wholesaleActive
+      ? WHOLESALE_MIN_KG - currentKg
+      : 0;
 
   const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
     addToCart(
@@ -387,40 +406,78 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </span>
           </div>
 
-          {/* Price + qty + CTA */}
+          {/* Price + qty + CTA. Price reflects wholesale rate when the
+              3kg threshold is crossed; retail total is then shown as a
+              strikethrough so the saving is obvious. */}
           <div className="mt-6 flex flex-wrap items-center gap-5">
-            <span className="font-display text-[clamp(1.5rem,2.5vw,2.25rem)] font-semibold tabular-nums tracking-tight">
-              {formatPrice(totalPrice)}
-            </span>
+            <div className="flex items-baseline gap-3">
+              <span className="font-display text-[clamp(1.5rem,2.5vw,2.25rem)] font-semibold tabular-nums tracking-tight">
+                {formatPrice(totalPrice)}
+              </span>
+              {wholesaleTotal && (
+                <span className="text-base font-medium text-[var(--color-text-muted)] line-through tabular-nums">
+                  {formatPrice(retailTotal)}
+                </span>
+              )}
+            </div>
             <QuantityStepper value={quantity} onChange={setQuantity} />
           </div>
 
-          {/* Wholesale price callout — shown only for coffee SKUs with a
-              1kg variant. Dark editorial card so it reads as a different
-              offer tier without competing with the primary buy button. */}
-          {(() => {
-            const wholesale = getWholesalePerKg(product);
-            if (!wholesale) return null;
-            return (
-              <div className="mt-5 flex items-center justify-between gap-4 rounded-[var(--radius-lg)] bg-[var(--color-bg-dark)] text-[var(--color-text-inverse)] px-5 py-4">
-                <div>
-                  <p className="text-[10px] tracking-[0.3em] uppercase text-white/55">
-                    Гуртова ціна
-                  </p>
-                  <p className="mt-1 text-sm text-white/85">
-                    від {WHOLESALE_MIN_KG} кг · −
-                    {WHOLESALE_DISCOUNT_PERCENT}%
-                  </p>
-                </div>
-                <p className="font-display text-2xl lg:text-3xl font-semibold tabular-nums">
-                  {formatPrice(wholesale)}
-                  <span className="ml-1 text-xs font-medium text-white/55">
+          {/* Wholesale state — two flavours sharing the same slot below
+              the price row so the layout stays stable:
+                - Before threshold: muted hint with the per-kg target and
+                  a small progress bar showing how close the customer is.
+                - After threshold: green success card with the saving
+                  amount. */}
+          {wholesalePerKg && !wholesaleActive && (
+            <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-5 py-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] tracking-[0.28em] uppercase text-[var(--color-text-muted)]">
+                  Гуртова ціна від {WHOLESALE_MIN_KG} кг
+                </p>
+                <p className="font-display text-base font-semibold tabular-nums">
+                  {formatPrice(wholesalePerKg)}
+                  <span className="ml-1 text-xs font-medium text-[var(--color-text-muted)]">
                     /кг
                   </span>
                 </p>
               </div>
-            );
-          })()}
+              <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                Додай ще{" "}
+                <span className="text-[var(--color-text-primary)] font-medium tabular-nums">
+                  {kgToWholesale.toFixed(2).replace(/\.?0+$/, "")} кг
+                </span>{" "}
+                — і отримаєш знижку −{WHOLESALE_DISCOUNT_PERCENT}%.
+              </p>
+              <div className="mt-3 h-[3px] rounded-full bg-[var(--color-border-strong)]/40 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{
+                    width: `${Math.min(100, (currentKg / WHOLESALE_MIN_KG) * 100)}%`,
+                    backgroundColor: "#E9D358",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {wholesaleActive && (
+            <div className="mt-4 rounded-[var(--radius-lg)] border border-emerald-300 bg-emerald-50/70 px-5 py-4">
+              <p className="text-[11px] tracking-[0.28em] uppercase text-emerald-700">
+                ✓ Гуртова знижка активована
+              </p>
+              <p className="mt-2 text-sm text-emerald-900">
+                Економія{" "}
+                <span className="font-display font-semibold tabular-nums">
+                  {formatPrice(wholesaleSavings)}
+                </span>{" "}
+                · ціна {formatPrice(wholesalePerKg!)} за кілограм при{" "}
+                <span className="tabular-nums">
+                  {currentKg.toFixed(2).replace(/\.?0+$/, "")} кг
+                </span>
+                .
+              </p>
+            </div>
+          )}
 
           <Button
             ref={primaryCtaRef}

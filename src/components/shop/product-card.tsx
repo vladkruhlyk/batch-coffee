@@ -37,6 +37,22 @@ export function ProductCard({ product }: ProductCardProps) {
   const roast = product.roasts?.[roastIndex];
   const hasRoasts = (product.roasts?.length ?? 0) > 0;
 
+  // Wholesale state — derived from current weight × quantity. If the
+  // total reaches the 3kg threshold and the SKU sells in kilo packs,
+  // the displayed price drops to the wholesale rate and we show a
+  // success badge. Below threshold we surface a hint line so the buyer
+  // knows the offer exists.
+  const wholesalePerKg = getWholesalePerKg(product);
+  const currentKg = (weight.grams * quantity) / 1000;
+  const wholesaleEligible =
+    wholesalePerKg !== null && currentKg >= WHOLESALE_MIN_KG;
+  const retailTotal = weight.price * quantity;
+  const wholesaleTotal = wholesaleEligible
+    ? Math.round(wholesalePerKg! * currentKg)
+    : null;
+  const displayPrice = wholesaleTotal ?? retailTotal;
+  const savings = wholesaleTotal ? retailTotal - wholesaleTotal : 0;
+
   // Pass the click event so useAddToCart can grab the button rect for the
   // fly-to-cart ghost. Without an event, the hook falls back to opening
   // the drawer for feedback.
@@ -130,46 +146,55 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Wholesale hint — small editorial line, only for coffee SKUs
-            with a 1kg variant. Sits above the main price row so it
-            informs the buyer before they commit to a single bag. */}
-        {(() => {
-          const wholesale = getWholesalePerKg(product);
-          if (!wholesale) return null;
-          return (
-            <div className="mt-auto -mb-1 inline-flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-[var(--color-text-muted)]">
-              <span>Гурт від {WHOLESALE_MIN_KG} кг</span>
-              <span aria-hidden>·</span>
-              <span className="font-display text-[11px] font-semibold tabular-nums text-[var(--color-text-primary)] tracking-normal">
-                {formatPrice(wholesale)}/кг
-              </span>
-            </div>
-          );
-        })()}
-
         {/* Price + qty + add. The qty stepper sits between the price and
             the cart button so the eye reads "ціна × кількість → додати"
             left-to-right. Compact size keeps the row from outgrowing the
             card on narrow grids. */}
-        <div className="mt-2 flex items-center justify-between gap-3 pt-2">
-          <span className="font-display text-xl font-semibold tabular-nums tracking-tight">
-            {formatPrice(weight.price * quantity)}
-          </span>
-          <div className="flex items-center gap-2">
-            <QuantityStepper
-              size="compact"
-              value={quantity}
-              onChange={setQuantity}
-            />
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              aria-label={`Додати ${product.name} (${weight.label}${roast ? `, ${roast}` : ""}) × ${quantity} у кошик`}
-              className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] transition-opacity duration-300 hover:opacity-80"
-            >
-              <ShoppingBag className="h-[18px] w-[18px]" strokeWidth={1.6} />
-            </button>
+        <div className="mt-auto flex flex-col gap-1.5 pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span className="font-display text-xl font-semibold tabular-nums tracking-tight">
+                {formatPrice(displayPrice)}
+              </span>
+              {wholesaleTotal && (
+                <span className="text-xs text-[var(--color-text-muted)] line-through tabular-nums">
+                  {formatPrice(retailTotal)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <QuantityStepper
+                size="compact"
+                value={quantity}
+                onChange={setQuantity}
+              />
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                aria-label={`Додати ${product.name} (${weight.label}${roast ? `, ${roast}` : ""}) × ${quantity} у кошик`}
+                className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] transition-opacity duration-300 hover:opacity-80"
+              >
+                <ShoppingBag className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              </button>
+            </div>
           </div>
+
+          {/* Wholesale state line. Two states, both compact, both
+              attached to the price row so there's no floating orphan: */}
+          {wholesalePerKg && !wholesaleTotal && (
+            <p className="text-[10px] tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+              Гурт від {WHOLESALE_MIN_KG} кг —{" "}
+              <span className="text-[var(--color-text-primary)] font-medium tabular-nums">
+                {formatPrice(wholesalePerKg)}/кг
+              </span>
+            </p>
+          )}
+          {wholesaleTotal && (
+            <p className="inline-flex items-center gap-2 text-[10px] tracking-[0.18em] uppercase text-emerald-700">
+              ✓ Гуртова знижка{" "}
+              <span className="tabular-nums">−{formatPrice(savings)}</span>
+            </p>
+          )}
         </div>
       </div>
     </article>

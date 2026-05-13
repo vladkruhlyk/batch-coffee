@@ -26,13 +26,18 @@ const LAST_FRAME = 5;
 // slightly less than the tick so each frame fully resolves before the next
 // starts coming in (avoids a perpetual ghost-overlap that reads as muddy).
 //
-// Original timing totalled ~4.2s and made the site feel slow to first-time
-// visitors. The new values bring it down to ~1.5s — enough for the brand
-// flourish to register, not so long that users wait.
-const FRAME_INTERVAL_MS = 220;
-const CROSSFADE_MS = 200;
-const HOLD_AFTER_LAST_MS = 200;
-const FADE_OUT_MS = 450;
+// History:
+//   - Original timings totalled ~4.2s — user said too slow.
+//   - 1.5s sprint → user said "стало очень быстрым в самом начале" — the
+//     brand flourish was over before it registered, and the page's Onest
+//     font hadn't finished loading yet so first-paint flashed system-ui.
+// Settled on ~2.5s: long enough for the brand moment + font load, short
+// enough that returning visitors (who skip the splash entirely via
+// localStorage) aren't affected and first-time visitors don't tap out.
+const FRAME_INTERVAL_MS = 360;
+const CROSSFADE_MS = 320;
+const HOLD_AFTER_LAST_MS = 380;
+const FADE_OUT_MS = 600;
 // Use `localStorage` (not session): show the splash exactly once per
 // browser — returning visitors get the site instantly. New visitors get
 // the brand moment once and never see it again. Closing the tab and

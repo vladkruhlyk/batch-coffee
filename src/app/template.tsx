@@ -6,19 +6,22 @@ import { EASING } from "@/lib/easing";
 /**
  * Page transition wrapper — applied to every route change.
  *
- * Kept very short (180ms) and opacity-only. The old 600ms fade + 12px Y
- * shift looked polished in isolation but stacked with route compilation
- * to make pages feel heavy ("туго переходить") — the new route was
- * invisible for more than half a second after the click. 180ms is below
- * the threshold where people perceive a delay; the navigation feels
- * snappy without losing the soft-fade refinement.
+ * History:
+ *   - 600ms + 12px Y shift → felt polished but pages were invisible too
+ *     long; users called it "туго переходить".
+ *   - 180ms opacity-only → snappy but lost the refined feel; user said
+ *     "переходы не плавные".
+ * Now: 320ms with a subtle 4px Y lift. Brain reads the soft motion as
+ * "smooth", but the perceived wait stays under 200ms because content
+ * is already 60% opacity by that point. Sweet spot between snappy and
+ * soft.
  */
 export default function Template({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.18, ease: EASING.smooth }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: EASING.smooth }}
     >
       {children}
     </motion.div>

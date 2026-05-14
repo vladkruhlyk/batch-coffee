@@ -39,7 +39,7 @@ export interface AuthUser {
   newsletter?: boolean;
 }
 
-export type AuthStep = "idle" | "code-sent";
+export type AuthStep = "idle" | "code-sent" | "needs-profile";
 
 interface AuthState {
   user: AuthUser | null;
@@ -89,8 +89,20 @@ interface AuthState {
   resetFlow: () => void;
   /** Wipe session entirely. Also signs out of Supabase. */
   logout: () => Promise<void>;
-  /** Patch user profile fields. No-op if not logged in. */
+  /** Patch user profile fields locally only. Used by the /account/profile
+   *  page for fields it persists itself (newsletter toggle etc). For the
+   *  required onboarding fields use `completeOnboarding`. */
   updateProfile: (patch: Partial<Omit<AuthUser, "id" | "createdAt">>) => void;
+
+  /** Persist required onboarding fields (firstName / lastName / phone) to
+   *  the `profiles` table and update the local user. Returns true on
+   *  success. Sets `step` back to "idle" so the login page's redirect
+   *  effect kicks in afterward. */
+  completeOnboarding: (patch: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+  }) => Promise<boolean>;
 
   /** Read the Supabase session and overwrite `user` if a real session exists.
    *  Called once on app boot from a top-level `<AuthHydrator />` component. */
@@ -139,7 +151,11 @@ export const useAuth = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      method: "phone",
+      // Email is the live method right now — phone OTP gateway isn't
+      // configured yet, so we default to the flow that actually works.
+      // The phone tab is still rendered but shows an "in development"
+      // notice instead of the input.
+      method: "email",
       pendingPhone: null,
       pendingEmail: null,
       step: "idle",
@@ -292,17 +308,37 @@ export const useAuth = create<AuthState>()(
         }
 
         const u = data.user;
-        set({
+
+        // Pull profile fields — populated by the on_auth_user_created
+        // trigger at signup, then enriched by the onboarding step. If
+        // any required field is still missing we route the user to
+        // /login's onboarding step instead of straight to /account.
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name, last_name, phone, email, newsletter")
+          .eq("id", u.id)
+          .maybeSingle();
+
+        const phone = profile?.phone ?? u.phone ?? "";
+        const firstName = profile?.first_name ?? undefined;
+        const lastName = profile?.last_name ?? undefined;
+        const needsProfile = !firstName || !lastName || !phone;
+
+        set((s) => ({
           user: {
             id: u.id,
-            phone: u.phone ?? "",
+            phone,
             email: u.email ?? pendingEmail,
+            firstName: firstName ?? undefined,
+            lastName: lastName ?? undefined,
+            newsletter: profile?.newsletter ?? undefined,
             createdAt: u.created_at ?? new Date().toISOString(),
           },
           pendingEmail: null,
-          step: "idle",
+          step: needsProfile ? "needs-profile" : "idle",
           error: null,
-        });
+          errorBump: s.errorBump,
+        }));
         return true;
       },
 
@@ -344,26 +380,92 @@ export const useAuth = create<AuthState>()(
         set({ user: { ...current, ...patch } });
       },
 
+      completeOnboarding: async (patch) => {
+        const current = get().user;
+        if (!current) {
+          set((s) => ({
+            error: "Сесія загубилась. Увійди знову.",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+
+        const firstName = patch.firstName.trim();
+        const lastName = patch.lastName.trim();
+        const phone = normalizePhone(patch.phone);
+
+        if (!firstName || !lastName) {
+          set((s) => ({
+            error: "Заповни ім'я та прізвище.",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+        if (!/^\+\d{7,15}$/.test(phone)) {
+          set((s) => ({
+            error: "Введи номер у міжнародному форматі — починаючи з «+».",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+
+        const supabase = createSupabaseBrowserClient();
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            first_name: firstName,
+            last_name: lastName,
+            phone,
+          })
+          .eq("id", current.id);
+
+        if (error) {
+          set((s) => ({
+            error: error.message || "Не вдалось зберегти. Спробуй знову.",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+
+        set({
+          user: { ...current, firstName, lastName, phone },
+          step: "idle",
+          error: null,
+        });
+        return true;
+      },
+
       syncFromSupabase: async () => {
         if (typeof window === "undefined") return;
         const supabase = createSupabaseBrowserClient();
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session?.user) {
-          const u = session.user;
-          // Supabase session wins — overwrite any stale local mirror. We
-          // intentionally don't merge with the previous `user` because the
-          // ids may differ (mock id vs Supabase UUID).
-          set({
-            user: {
-              id: u.id,
-              phone: u.phone ?? "",
-              email: u.email ?? undefined,
-              createdAt: u.created_at ?? new Date().toISOString(),
-            },
-          });
-        }
+        if (!session?.user) return;
+        const u = session.user;
+
+        // Pull profile alongside — auth.users gives us id/email/phone but
+        // first/last name + newsletter live in our profiles table.
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name, last_name, phone, email, newsletter")
+          .eq("id", u.id)
+          .maybeSingle();
+
+        // Supabase session wins — overwrite any stale local mirror. We
+        // intentionally don't merge with the previous `user` because the
+        // ids may differ (mock id vs Supabase UUID).
+        set({
+          user: {
+            id: u.id,
+            phone: profile?.phone ?? u.phone ?? "",
+            email: u.email ?? profile?.email ?? undefined,
+            firstName: profile?.first_name ?? undefined,
+            lastName: profile?.last_name ?? undefined,
+            newsletter: profile?.newsletter ?? undefined,
+            createdAt: u.created_at ?? new Date().toISOString(),
+          },
+        });
       },
     }),
     {

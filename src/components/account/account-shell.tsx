@@ -84,10 +84,14 @@ export function AccountShell({ children }: AccountShellProps) {
     return null;
   }
 
+  // Greeting falls back through name → phone → email. Anonymous-feel
+  // empty string is the last resort so the layout doesn't break.
   const displayName =
     user.firstName || user.lastName
       ? [user.firstName, user.lastName].filter(Boolean).join(" ")
-      : formatPhone(user.phone);
+      : user.phone
+        ? formatPhone(user.phone)
+        : (user.email ?? "");
 
   return (
     <Container size="wide" className="pt-28 lg:pt-36 pb-[var(--section-gap)]">
@@ -98,7 +102,7 @@ export function AccountShell({ children }: AccountShellProps) {
             Особистий кабінет
           </span>
           <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.75rem)] leading-[1.02] tracking-[-0.04em] mt-4">
-            Вітаємо, {displayName}.
+            {displayName ? `Вітаємо, ${displayName}.` : "Вітаємо."}
           </h1>
         </div>
         {/* Logout — matched to the rest of the site's secondary CTA style

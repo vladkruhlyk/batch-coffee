@@ -15,23 +15,25 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Container } from "@/components/layout/container";
-import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
+import {
+  useAuth,
+  formatPhone,
+  normalizePhone,
+  type AuthMethod,
+} from "@/lib/auth-store";
 import { EASING } from "@/lib/easing";
 import { cn } from "@/lib/utils";
 
 /**
- * Login page — phone + OTP, two-step flow on a single route.
+ * Login page — two methods, two-step flow on a single route.
  *
- * The page renders one of two panels driven by `step` in the auth store:
- *   - "idle"      → phone input + "Отримати код"
- *   - "code-sent" → 4-digit OTP with auto-advance + resend countdown
+ * Method toggle at the top swaps between phone (SMS OTP, mocked today)
+ * and email (real Supabase email OTP). Each method has its own entry
+ * step + verification step. The store's `step` field drives which step
+ * is visible.
  *
- * Once `verifyCode` succeeds the `user` field flips truthy in the store
- * and the effect below pushes to `/account` (or `?next=` if present).
- *
- * Backed by the mock auth store today — `requestCode`/`verifyCode` are
- * already fire-and-forget async, so swapping to Supabase signInWithOtp /
- * verifyOtp later requires no UI changes here.
+ * Once verification succeeds, `user` flips truthy in the store and the
+ * effect below pushes to `/account` (or `?next=` if present).
  */
 /**
  * Top-level page — wraps the inner component in <Suspense> so Next.js
@@ -54,12 +56,17 @@ function LoginInner() {
 
   const user = useAuth((s) => s.user);
   const step = useAuth((s) => s.step);
+  const method = useAuth((s) => s.method);
   const pendingPhone = useAuth((s) => s.pendingPhone);
+  const pendingEmail = useAuth((s) => s.pendingEmail);
   const error = useAuth((s) => s.error);
   const errorBump = useAuth((s) => s.errorBump);
   const hydrated = useAuth((s) => s.hydrated);
+  const setMethod = useAuth((s) => s.setMethod);
   const requestCode = useAuth((s) => s.requestCode);
   const verifyCode = useAuth((s) => s.verifyCode);
+  const requestEmailCode = useAuth((s) => s.requestEmailCode);
+  const verifyEmailCode = useAuth((s) => s.verifyEmailCode);
   const resetFlow = useAuth((s) => s.resetFlow);
 
   // Already logged in? Bounce immediately. Wait for hydration so we don't
@@ -84,23 +91,44 @@ function LoginInner() {
 
           <AnimatePresence mode="wait">
             {step === "code-sent" ? (
-              <CodeStep
-                key="code"
-                phone={pendingPhone}
-                error={error}
-                errorBump={errorBump}
-                onVerify={verifyCode}
-                onBack={resetFlow}
-                onResend={async () => {
-                  if (pendingPhone) await requestCode(pendingPhone);
-                }}
-              />
+              method === "email" ? (
+                <CodeStep
+                  key="code-email"
+                  destination={pendingEmail}
+                  destinationLabel="email"
+                  codeLength={6}
+                  error={error}
+                  errorBump={errorBump}
+                  onVerify={verifyEmailCode}
+                  onBack={resetFlow}
+                  onResend={async () => {
+                    if (pendingEmail) await requestEmailCode(pendingEmail);
+                  }}
+                />
+              ) : (
+                <CodeStep
+                  key="code-phone"
+                  destination={pendingPhone}
+                  destinationLabel="phone"
+                  codeLength={4}
+                  error={error}
+                  errorBump={errorBump}
+                  onVerify={verifyCode}
+                  onBack={resetFlow}
+                  onResend={async () => {
+                    if (pendingPhone) await requestCode(pendingPhone);
+                  }}
+                />
+              )
             ) : (
-              <PhoneStep
-                key="phone"
+              <EntryStep
+                key="entry"
+                method={method}
                 error={error}
                 errorBump={errorBump}
-                onSubmit={requestCode}
+                onMethodChange={setMethod}
+                onSubmitPhone={requestCode}
+                onSubmitEmail={requestEmailCode}
               />
             )}
           </AnimatePresence>
@@ -111,10 +139,133 @@ function LoginInner() {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — phone input.
+// Step 1 — method toggle + matching input (phone OR email).
 // ---------------------------------------------------------------------------
 
-function PhoneStep({
+function EntryStep({
+  method,
+  error,
+  errorBump,
+  onMethodChange,
+  onSubmitPhone,
+  onSubmitEmail,
+}: {
+  method: AuthMethod;
+  error: string | null;
+  errorBump: number;
+  onMethodChange: (m: AuthMethod) => void;
+  onSubmitPhone: (phone: string) => Promise<void>;
+  onSubmitEmail: (email: string) => Promise<void>;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ duration: 0.45, ease: EASING.smooth }}
+    >
+      <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
+        Вхід / Реєстрація
+      </span>
+      <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-[-0.035em] mt-4">
+        {method === "email"
+          ? "Заходимо за email."
+          : "Заходимо за номером телефона."}
+      </h1>
+      <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
+        {method === "email"
+          ? "Введи свою адресу — пришлемо 6-значний код на пошту. Якщо акаунту ще нема — створимо його за секунду."
+          : "Введи свій номер — пришлемо код в SMS. Якщо акаунту ще нема — створимо його за секунду. Без паролів, без зайвих кроків."}
+      </p>
+
+      {/* Method tabs — phone is primary, email is the alternate. */}
+      <MethodTabs method={method} onChange={onMethodChange} />
+
+      {/* AnimatePresence swap so the field morphs in on tab change instead
+          of popping. Mode "wait" prevents both forms rendering at once. */}
+      <AnimatePresence mode="wait">
+        {method === "email" ? (
+          <EmailField
+            key="email-field"
+            error={error}
+            errorBump={errorBump}
+            onSubmit={onSubmitEmail}
+          />
+        ) : (
+          <PhoneField
+            key="phone-field"
+            error={error}
+            errorBump={errorBump}
+            onSubmit={onSubmitPhone}
+          />
+        )}
+      </AnimatePresence>
+
+      {method === "phone" && (
+        // Demo hint — only relevant while the SMS gateway is offline. Drop
+        // this block once real OTP is wired through Twilio / TurboSMS.
+        <p className="mt-8 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+          Демо-режим: SMS не відправляється. На наступному кроці введи{" "}
+          <span className="text-[var(--color-text-primary)] font-medium">
+            будь-які 4 цифри
+          </span>
+          — система прийме.
+        </p>
+      )}
+    </motion.section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Method tabs — segmented control.
+// ---------------------------------------------------------------------------
+
+function MethodTabs({
+  method,
+  onChange,
+}: {
+  method: AuthMethod;
+  onChange: (m: AuthMethod) => void;
+}) {
+  const tabs: Array<{ key: AuthMethod; label: string }> = [
+    { key: "phone", label: "Телефон" },
+    { key: "email", label: "Email" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Метод входу"
+      className="mt-9 inline-flex rounded-full border border-[var(--color-border-strong)] p-1 bg-[var(--color-bg-primary)]"
+    >
+      {tabs.map((t) => {
+        const active = method === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.key)}
+            className={cn(
+              "px-5 py-2 text-xs tracking-[0.18em] uppercase rounded-full transition-colors",
+              active
+                ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
+            )}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phone field (Step 1, phone method).
+// ---------------------------------------------------------------------------
+
+function PhoneField({
   error,
   errorBump,
   onSubmit,
@@ -152,88 +303,146 @@ function PhoneStep({
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
+    <motion.form
+      onSubmit={handleSubmit}
+      className="mt-8"
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.45, ease: EASING.smooth }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.3, ease: EASING.smooth }}
     >
-      <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
-        Вхід / Реєстрація
-      </span>
-      <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-[-0.035em] mt-4">
-        Заходимо за номером телефона.
-      </h1>
-      <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
-        Введи свій номер — пришлемо код в SMS. Якщо акаунту ще нема — створимо
-        його за секунду. Без паролів, без зайвих кроків.
-      </p>
+      <label
+        htmlFor="phone"
+        className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
+      >
+        Номер телефону
+      </label>
+      <input
+        id="phone"
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel"
+        autoFocus
+        value={value}
+        onChange={handleChange}
+        placeholder="+380 50 123 45 67"
+        className="w-full text-xl font-display tabular-nums bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
+      />
 
-      <form onSubmit={handleSubmit} className="mt-10">
-        <label
-          htmlFor="phone"
-          className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
-        >
-          Номер телефону
-        </label>
-        <input
-          id="phone"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          autoFocus
-          value={value}
-          onChange={handleChange}
-          placeholder="+380 50 123 45 67"
-          className="w-full text-xl font-display tabular-nums bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
-        />
+      <ErrorLine error={error} errorBump={errorBump} />
 
-        <ErrorLine error={error} errorBump={errorBump} />
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-8 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85 disabled:opacity-60 disabled:cursor-wait"
-        >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              Отримати код <ArrowRight className="h-4 w-4" />
-            </>
-          )}
-        </button>
-      </form>
-
-      {/* Demo hint — only relevant while mocks are live. Replace this with
-          regular fine-print copy when the backend lands. */}
-      <p className="mt-8 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
-        Демо-режим: SMS не відправляється. На наступному кроці введи{" "}
-        <span className="text-[var(--color-text-primary)] font-medium">
-          будь-які 4 цифри
-        </span>
-        — система прийме.
-      </p>
-    </motion.section>
+      <button
+        type="submit"
+        disabled={submitting}
+        className="mt-8 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85 disabled:opacity-60 disabled:cursor-wait"
+      >
+        {submitting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            Отримати код <ArrowRight className="h-4 w-4" />
+          </>
+        )}
+      </button>
+    </motion.form>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — 4-digit OTP with auto-advance + resend countdown.
+// Email field (Step 1, email method).
 // ---------------------------------------------------------------------------
 
-const CODE_LENGTH = 4;
+function EmailField({
+  error,
+  errorBump,
+  onSubmit,
+}: {
+  error: string | null;
+  errorBump: number;
+  onSubmit: (email: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(value);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.form
+      onSubmit={handleSubmit}
+      className="mt-8"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.3, ease: EASING.smooth }}
+    >
+      <label
+        htmlFor="email"
+        className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
+      >
+        Email
+      </label>
+      <input
+        id="email"
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="you@example.com"
+        className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
+      />
+
+      <ErrorLine error={error} errorBump={errorBump} />
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="mt-8 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85 disabled:opacity-60 disabled:cursor-wait"
+      >
+        {submitting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            Отримати код <ArrowRight className="h-4 w-4" />
+          </>
+        )}
+      </button>
+    </motion.form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 2 — OTP grid with auto-advance + resend countdown.
+//
+// Shared between phone (4 cells, mock) and email (6 cells, Supabase). Cell
+// width shrinks when length=6 so 6 cells still fit on a 360px viewport.
+// ---------------------------------------------------------------------------
+
 const RESEND_SECONDS = 60;
 
 function CodeStep({
-  phone,
+  destination,
+  destinationLabel,
+  codeLength,
   error,
   errorBump,
   onVerify,
   onBack,
   onResend,
 }: {
-  phone: string | null;
+  destination: string | null;
+  destinationLabel: "phone" | "email";
+  codeLength: number;
   error: string | null;
   errorBump: number;
   onVerify: (code: string) => Promise<boolean>;
@@ -245,7 +454,7 @@ function CodeStep({
   const nextHref = params.get("next") ?? "/account";
 
   const [digits, setDigits] = useState<string[]>(() =>
-    Array(CODE_LENGTH).fill(""),
+    Array(codeLength).fill(""),
   );
   const [submitting, setSubmitting] = useState(false);
   const [resendIn, setResendIn] = useState(RESEND_SECONDS);
@@ -267,23 +476,22 @@ function CodeStep({
 
   const handleVerify = useCallback(
     async (code: string) => {
-      if (submitting || code.length !== CODE_LENGTH) return;
+      if (submitting || code.length !== codeLength) return;
       setSubmitting(true);
       try {
         const ok = await onVerify(code);
         if (ok) {
-          // Successful login — route to next page.
           router.replace(nextHref);
         } else {
           // Clear cells so the user can type a fresh code without backspacing.
-          setDigits(Array(CODE_LENGTH).fill(""));
+          setDigits(Array(codeLength).fill(""));
           inputs.current[0]?.focus();
         }
       } finally {
         setSubmitting(false);
       }
     },
-    [onVerify, router, nextHref, submitting],
+    [onVerify, router, nextHref, submitting, codeLength],
   );
 
   const updateDigit = (i: number, raw: string) => {
@@ -292,12 +500,12 @@ function CodeStep({
       const copy = [...prev];
       copy[i] = next;
       // Auto-advance focus on filled cell.
-      if (next && i < CODE_LENGTH - 1) {
+      if (next && i < codeLength - 1) {
         inputs.current[i + 1]?.focus();
       }
       // Auto-submit when all cells filled.
       const joined = copy.join("");
-      if (joined.length === CODE_LENGTH && !copy.includes("")) {
+      if (joined.length === codeLength && !copy.includes("")) {
         handleVerify(joined);
       }
       return copy;
@@ -311,34 +519,45 @@ function CodeStep({
     if (e.key === "ArrowLeft" && i > 0) {
       inputs.current[i - 1]?.focus();
     }
-    if (e.key === "ArrowRight" && i < CODE_LENGTH - 1) {
+    if (e.key === "ArrowRight" && i < codeLength - 1) {
       inputs.current[i + 1]?.focus();
     }
   };
 
-  // Paste support — drop a copied "1234" into any cell and we fan it out.
+  // Paste support — drop a copied "1234" / "123456" into any cell and we
+  // fan it out across all cells.
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData("text").replace(/\D/g, "");
     if (text.length === 0) return;
     e.preventDefault();
-    const chars = text.slice(0, CODE_LENGTH).split("");
-    const next = Array(CODE_LENGTH).fill("");
+    const chars = text.slice(0, codeLength).split("");
+    const next = Array(codeLength).fill("");
     chars.forEach((c, idx) => (next[idx] = c));
     setDigits(next);
     const lastFilled = chars.length - 1;
-    inputs.current[Math.min(lastFilled + 1, CODE_LENGTH - 1)]?.focus();
-    if (chars.length === CODE_LENGTH) {
+    inputs.current[Math.min(lastFilled + 1, codeLength - 1)]?.focus();
+    if (chars.length === codeLength) {
       handleVerify(next.join(""));
     }
   };
 
-  const prettyPhone = useMemo(() => formatPhone(phone), [phone]);
+  const prettyDestination = useMemo(() => {
+    if (!destination) return "";
+    return destinationLabel === "phone" ? formatPhone(destination) : destination;
+  }, [destination, destinationLabel]);
 
   const handleResend = async () => {
     if (resendIn > 0) return;
     await onResend();
     setResendIn(RESEND_SECONDS);
   };
+
+  // 6 digits is tight on narrow phones — shrink the cells a notch so the
+  // row still fits inside the 320px–360px content column.
+  const cellClasses =
+    codeLength >= 6
+      ? "h-14 w-10 sm:h-16 sm:w-12 lg:h-20 lg:w-14 text-2xl lg:text-3xl"
+      : "h-16 w-14 lg:h-20 lg:w-16 text-3xl lg:text-4xl";
 
   return (
     <motion.section
@@ -352,24 +571,32 @@ function CodeStep({
         onClick={onBack}
         className="inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors mb-8"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Інший номер
+        <ArrowLeft className="h-3.5 w-3.5" />{" "}
+        {destinationLabel === "phone" ? "Інший номер" : "Інший email"}
       </button>
 
       <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
         Введи код
       </span>
       <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-[-0.035em] mt-4">
-        Перевіряємо твій номер.
+        {destinationLabel === "phone"
+          ? "Перевіряємо твій номер."
+          : "Перевіряємо твою адресу."}
       </h1>
       <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
         Відправили код на{" "}
-        <span className="text-[var(--color-text-primary)] font-medium tabular-nums">
-          {prettyPhone}
+        <span
+          className={cn(
+            "text-[var(--color-text-primary)] font-medium",
+            destinationLabel === "phone" && "tabular-nums",
+          )}
+        >
+          {prettyDestination}
         </span>
-        . Введи 4 цифри нижче.
+        . Введи {codeLength} цифр нижче.
       </p>
 
-      <div className="mt-10 flex gap-3" onPaste={handlePaste}>
+      <div className="mt-10 flex gap-2 sm:gap-3" onPaste={handlePaste}>
         {digits.map((d, i) => (
           <input
             key={i}
@@ -384,7 +611,10 @@ function CodeStep({
             onKeyDown={(e) => handleKey(i, e)}
             disabled={submitting}
             aria-label={`Цифра ${i + 1}`}
-            className="h-16 w-14 lg:h-20 lg:w-16 rounded-[var(--radius-lg)] border-2 border-[var(--color-border-strong)] bg-transparent text-center text-3xl lg:text-4xl font-display tabular-nums focus:border-[var(--color-text-primary)] outline-none transition-colors disabled:opacity-60"
+            className={cn(
+              "rounded-[var(--radius-lg)] border-2 border-[var(--color-border-strong)] bg-transparent text-center font-display tabular-nums focus:border-[var(--color-text-primary)] outline-none transition-colors disabled:opacity-60",
+              cellClasses,
+            )}
           />
         ))}
       </div>

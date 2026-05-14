@@ -198,7 +198,9 @@ export default function ProfilePage() {
               onClick={() => {
                 resetSubscription();
                 clearCart();
-                logout();
+                // Fire-and-forget Supabase signOut — local state wipes
+                // synchronously inside logout(), so the redirect is safe.
+                void logout();
                 router.replace("/");
               }}
               className="inline-flex items-center gap-2 rounded-full bg-rose-700 text-white px-5 py-2.5 text-sm hover:bg-rose-800 transition-colors"

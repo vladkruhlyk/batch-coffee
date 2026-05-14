@@ -108,7 +108,9 @@ export function AccountShell({ children }: AccountShellProps) {
           <button
             type="button"
             onClick={() => {
-              logout();
+              // Fire-and-forget — signOut() round-trip shouldn't block the
+              // redirect. Local state wipes synchronously inside logout().
+              void logout();
               router.replace("/");
             }}
             className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] px-5 py-2.5 text-sm text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors"

@@ -452,20 +452,33 @@ export const useAuth = create<AuthState>()(
           .eq("id", u.id)
           .maybeSingle();
 
+        const phone = profile?.phone ?? u.phone ?? "";
+        const firstName = profile?.first_name ?? undefined;
+        const lastName = profile?.last_name ?? undefined;
+        const needsProfile = !firstName || !lastName || !phone;
+
         // Supabase session wins — overwrite any stale local mirror. We
         // intentionally don't merge with the previous `user` because the
         // ids may differ (mock id vs Supabase UUID).
-        set({
+        //
+        // If the profile is incomplete (existing email signups that never
+        // finished onboarding — including anyone who signed up before the
+        // onboarding flow shipped), flag the step so /login shows the
+        // onboarding screen instead of bouncing them to /account.
+        set((s) => ({
           user: {
             id: u.id,
-            phone: profile?.phone ?? u.phone ?? "",
+            phone,
             email: u.email ?? profile?.email ?? undefined,
-            firstName: profile?.first_name ?? undefined,
-            lastName: profile?.last_name ?? undefined,
+            firstName,
+            lastName,
             newsletter: profile?.newsletter ?? undefined,
             createdAt: u.created_at ?? new Date().toISOString(),
           },
-        });
+          // Only override step if it's currently idle. Don't clobber an
+          // in-flight "code-sent" (rare race, but defensive).
+          step: needsProfile && s.step === "idle" ? "needs-profile" : s.step,
+        }));
       },
     }),
     {

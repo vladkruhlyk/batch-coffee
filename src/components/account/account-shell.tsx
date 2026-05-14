@@ -70,11 +70,28 @@ export function AccountShell({ children }: AccountShellProps) {
   const logout = useAuth((s) => s.logout);
 
   // Auth guard. Push to /login with ?next= so the user lands back here
-  // after verifying their code.
+  // after verifying their code. Also drag users with incomplete profiles
+  // through onboarding before letting them see the cabinet — the email
+  // OTP flow doesn't collect a name and we need at least one to render a
+  // useful greeting (otherwise "Вітаємо, email@..." which feels weird).
   useEffect(() => {
-    if (hydrated && !user) {
+    if (!hydrated) return;
+    if (!user) {
       const next = encodeURIComponent(pathname || "/account");
       router.replace(`/login?next=${next}`);
+      return;
+    }
+    // Skip the completeness check for legacy phone-mock users — their
+    // id has the "mock-" prefix and there's no Supabase profile row to
+    // fill in. Once real SMS lands, the mock branch goes away entirely.
+    const isMockUser = user.id.startsWith("mock-");
+    const incomplete =
+      !isMockUser && (!user.firstName || !user.lastName || !user.phone);
+    if (incomplete) {
+      // The /login page reads `step` directly from the store; setting it
+      // here is the cleanest way to signal "open onboarding, not entry".
+      useAuth.setState({ step: "needs-profile" });
+      router.replace("/login");
     }
   }, [hydrated, user, router, pathname]);
 

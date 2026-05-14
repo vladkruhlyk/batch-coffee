@@ -37,6 +37,10 @@ export interface AuthUser {
   createdAt: string;
   /** Subscribed to the marketing newsletter — toggled from /account/profile. */
   newsletter?: boolean;
+  /** Owner / staff flag from `profiles.is_admin`. Drives visibility of the
+   *  /admin link in the account sidebar. The actual route is server-guarded
+   *  and RLS-gated — this flag is purely a UI hint. */
+  isAdmin?: boolean;
 }
 
 export type AuthStep = "idle" | "code-sent" | "needs-profile";
@@ -315,7 +319,7 @@ export const useAuth = create<AuthState>()(
         // /login's onboarding step instead of straight to /account.
         const { data: profile } = await supabase
           .from("profiles")
-          .select("first_name, last_name, phone, email, newsletter")
+          .select("first_name, last_name, phone, email, newsletter, is_admin")
           .eq("id", u.id)
           .maybeSingle();
 
@@ -332,6 +336,7 @@ export const useAuth = create<AuthState>()(
             firstName: firstName ?? undefined,
             lastName: lastName ?? undefined,
             newsletter: profile?.newsletter ?? undefined,
+            isAdmin: profile?.is_admin ?? false,
             createdAt: u.created_at ?? new Date().toISOString(),
           },
           pendingEmail: null,
@@ -445,10 +450,10 @@ export const useAuth = create<AuthState>()(
         const u = session.user;
 
         // Pull profile alongside — auth.users gives us id/email/phone but
-        // first/last name + newsletter live in our profiles table.
+        // first/last name + newsletter + is_admin live in our profiles table.
         const { data: profile } = await supabase
           .from("profiles")
-          .select("first_name, last_name, phone, email, newsletter")
+          .select("first_name, last_name, phone, email, newsletter, is_admin")
           .eq("id", u.id)
           .maybeSingle();
 
@@ -473,6 +478,7 @@ export const useAuth = create<AuthState>()(
             firstName,
             lastName,
             newsletter: profile?.newsletter ?? undefined,
+            isAdmin: profile?.is_admin ?? false,
             createdAt: u.created_at ?? new Date().toISOString(),
           },
           // Only override step if it's currently idle. Don't clobber an

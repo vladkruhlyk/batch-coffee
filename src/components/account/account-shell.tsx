@@ -9,6 +9,7 @@ import {
   MapPin,
   PackageOpen,
   Repeat,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { Container } from "@/components/layout/container";
@@ -168,6 +169,17 @@ export function AccountShell({ children }: AccountShellProps) {
                 </Link>
               );
             })}
+            {/* Admin shortcut — only owners see it. The actual route is
+                guarded server-side so this flag is just a UI hint. */}
+            {user.isAdmin && (
+              <Link
+                href="/admin"
+                className="mt-4 group flex items-center gap-3 rounded-full px-5 py-3 text-sm border border-dashed border-[var(--color-border-strong)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+              >
+                <ShieldCheck className="h-4 w-4" strokeWidth={1.6} />
+                Адмінка
+              </Link>
+            )}
           </nav>
         </aside>
 
@@ -194,6 +206,15 @@ export function AccountShell({ children }: AccountShellProps) {
               </Link>
             );
           })}
+          {user.isAdmin && (
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm whitespace-nowrap border border-dashed border-[var(--color-border-strong)] text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] transition-colors"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.6} />
+              Адмінка
+            </Link>
+          )}
         </nav>
 
         <div className="lg:col-span-9">{children}</div>

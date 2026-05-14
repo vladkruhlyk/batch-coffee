@@ -41,6 +41,10 @@ interface CartState {
   remove: (id: string) => void;
   setQuantity: (id: string, n: number) => void;
   clear: () => void;
+  /** Replace the entire items array. Used by the checkout's
+   *  price-refresh step so it can update line prices in one shot
+   *  without having to remove+re-add. */
+  replaceItems: (items: CartItem[]) => void;
   openCart: () => void;
   closeCart: () => void;
   toggleCart: () => void;
@@ -109,6 +113,8 @@ export const useCart = create<CartState>()(
         })),
 
       clear: () => set({ items: [] }),
+
+      replaceItems: (items) => set({ items }),
 
       openCart: () => set({ open: true }),
       closeCart: () => set({ open: false }),

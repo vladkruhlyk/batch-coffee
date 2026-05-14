@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
@@ -10,6 +10,7 @@ import { Footer } from "@/components/layout/footer";
 import { useCart, getCartSubtotal } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
 import { createOrder } from "@/lib/orders";
+import { refreshCartPrices } from "@/lib/refresh-cart-prices";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -35,8 +36,16 @@ export default function CheckoutPage() {
   const router = useRouter();
   const items = useCart((s) => s.items);
   const clearCart = useCart((s) => s.clear);
+  const replaceCartItems = useCart((s) => s.replaceItems);
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
+
+  // Surface a banner if Sanity prices have drifted from what's in the
+  // cart. Resolved on mount; doesn't block the form so the user can
+  // keep filling fields while we hit Sanity.
+  const [priceChanges, setPriceChanges] = useState<
+    Array<{ name: string; weightLabel: string; oldPrice: number; newPrice: number }>
+  >([]);
 
   // Form state — flat for simplicity. Pickup-only flow, so no city /
   // destination fields.
@@ -71,6 +80,41 @@ export default function CheckoutPage() {
       router.replace("/login?next=/checkout");
     }
   }, [hydrated, user, router]);
+
+  // Re-validate cart prices against live Sanity values once on mount.
+  // Cart items snapshot unit prices at add-time and can drift if admin
+  // updates them in the CMS — without this refresh the customer would
+  // be charged whatever they happened to add at; with it they always
+  // pay what the site currently lists.
+  //
+  // Empty-deps + ref guard so the refresh fires exactly once per
+  // mount, regardless of cart re-renders from prefill state below.
+  const refreshedRef = useRef(false);
+  useEffect(() => {
+    if (refreshedRef.current) return;
+    if (!hydrated || items.length === 0) return;
+    refreshedRef.current = true;
+    refreshCartPrices(items)
+      .then(({ updatedItems, changed }) => {
+        if (changed.length > 0) {
+          replaceCartItems(updatedItems);
+          setPriceChanges(
+            changed.map((c) => ({
+              name: c.name,
+              weightLabel: c.weightLabel,
+              oldPrice: c.oldPrice,
+              newPrice: c.newPrice,
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        // Sanity down / network blip — fall back to cached prices.
+        // Worse case: user pays what they added at, which is the
+        // pre-fix status quo.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   const subtotal = getCartSubtotal(items);
   // Pickup is free; that's the only delivery method available right now.
@@ -186,7 +230,7 @@ export default function CheckoutPage() {
           </header>
 
           {/* Banner — explains why some options are locked */}
-          <div className="mb-10 lg:mb-12 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-5 py-4 lg:px-6 lg:py-5 flex items-start gap-4">
+          <div className="mb-6 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-5 py-4 lg:px-6 lg:py-5 flex items-start gap-4">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]">
               <Lock className="h-4 w-4" strokeWidth={1.6} />
             </span>
@@ -201,6 +245,36 @@ export default function CheckoutPage() {
               </p>
             </div>
           </div>
+
+          {/* Banner — surfaces cart price drift if Sanity has changed
+              since the items were added. We update the cart silently
+              and let the user re-confirm the new total. */}
+          {priceChanges.length > 0 && (
+            <div className="mb-10 lg:mb-12 rounded-[var(--radius-xl)] border border-amber-200 bg-amber-50 px-5 py-4 lg:px-6 lg:py-5">
+              <p className="font-display font-semibold text-base text-amber-900">
+                Ціни оновились
+              </p>
+              <p className="mt-1 text-sm text-amber-800 leading-relaxed">
+                Поки кошик чекав — деякі позиції змінились. Ось як зараз:
+              </p>
+              <ul className="mt-3 space-y-1 text-sm text-amber-900 tabular-nums">
+                {priceChanges.map((c) => (
+                  <li key={`${c.name}-${c.weightLabel}`} className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {c.name} · {c.weightLabel}:
+                    </span>
+                    <span className="text-amber-800 line-through">
+                      {formatPrice(c.oldPrice)}
+                    </span>
+                    <span>→</span>
+                    <span className="font-display font-semibold">
+                      {formatPrice(c.newPrice)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <form
             onSubmit={submit}

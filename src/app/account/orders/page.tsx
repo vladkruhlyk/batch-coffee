@@ -1,18 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { ChevronDown, RotateCcw, Truck } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Loader2, RotateCcw, Truck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  getMockOrders,
+  listOrders,
   statusLabel,
   statusTone,
-  type MockOrder,
+  type Order,
   type OrderStatus,
-} from "@/data/mock-account";
+  type OrderItem,
+  getOrderWithItems,
+} from "@/lib/orders";
 import { PRODUCTS } from "@/data/products";
 import { useCart } from "@/lib/cart-store";
+import { useAuth } from "@/lib/auth-store";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 
@@ -27,34 +31,86 @@ const FILTER_LABELS: Record<Filter, string> = {
 const ACTIVE_STATUSES: OrderStatus[] = ["pending", "paid", "packing", "shipped"];
 
 /**
- * Orders tab — list of all past + active orders with collapse/expand
- * deep-dive on each row.
+ * Customer orders tab — now on real Supabase data.
  *
- * Three filter pills route between "Усі / Активні / Доставлені". Tapping
- * an order chevrons it open in place — items, tracking, address, total
- * breakdown become visible without a separate detail route. Keeps the
- * UX feel of a single scrollable inbox rather than tree-navigation.
+ * RLS narrows `listOrders()` to "own" automatically, so we don't pass
+ * the user id explicitly. Items load lazily when a row is expanded —
+ * keeps the initial payload small even for customers with many orders.
  */
 export default function OrdersPage() {
   const router = useRouter();
   const addToCart = useCart((s) => s.add);
-  const orders = useMemo(() => getMockOrders(), []);
+  const user = useAuth((s) => s.user);
+  const hydrated = useAuth((s) => s.hydrated);
+
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const [openId, setOpenId] = useState<string | null>(orders[0]?.id ?? null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [itemsCache, setItemsCache] = useState<Record<string, OrderItem[]>>({});
+  const [loadingItems, setLoadingItems] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hydrated || !user) return;
+    let cancelled = false;
+    listOrders()
+      .then((data) => {
+        if (cancelled) return;
+        setOrders(data);
+        // Auto-open the most recent one — same as before.
+        if (data.length > 0) setOpenId(data[0].id);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setError(
+            e instanceof Error ? e.message : "Не вдалось завантажити.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, user]);
+
+  // Lazy-load items when an order opens for the first time.
+  const expand = async (orderId: string) => {
+    if (openId === orderId) {
+      setOpenId(null);
+      return;
+    }
+    setOpenId(orderId);
+    if (!itemsCache[orderId]) {
+      setLoadingItems(orderId);
+      try {
+        const fresh = await getOrderWithItems(orderId);
+        if (fresh) {
+          setItemsCache((prev) => ({ ...prev, [orderId]: fresh.items }));
+        }
+      } catch {
+        // Surface only if needed — failing to load items in expand is
+        // mostly recoverable on the next click.
+      } finally {
+        setLoadingItems(null);
+      }
+    }
+  };
 
   /**
-   * "Повторити замовлення" — replays every item from the historical order
-   * back into the active cart, then routes to /cart so the user can
-   * confirm before checkout. We look up the original product from the
-   * catalogue rather than reconstruct from snapshot fields — that way
-   * prices stay accurate even if they changed since the original order.
-   * Items whose slug no longer exists are silently skipped (out of stock /
-   * delisted).
+   * "Повторити замовлення" — replay items into the active cart and route
+   * to /cart. Looks up the live Product (not the line snapshot) so the
+   * price stays current. Items whose slug was delisted are skipped.
    */
-  const reorder = (order: MockOrder) => {
+  const reorder = async (order: Order) => {
+    const items = itemsCache[order.id] ?? (
+      (await getOrderWithItems(order.id))?.items ?? []
+    );
     let added = 0;
-    for (const item of order.items) {
-      const product = PRODUCTS.find((p) => p.slug === item.slug);
+    for (const item of items) {
+      const product = PRODUCTS.find((p) => p.slug === item.productSlug);
       if (!product) continue;
       const weightIndex = product.weights.findIndex(
         (w) => w.label === item.weightLabel,
@@ -62,7 +118,7 @@ export default function OrdersPage() {
       if (weightIndex < 0) continue;
       addToCart(product, {
         weightIndex,
-        roast: item.roast,
+        roast: item.roast ?? undefined,
         quantity: item.quantity,
       });
       added += 1;
@@ -108,12 +164,24 @@ export default function OrdersPage() {
         </div>
       </header>
 
-      {visible.length === 0 ? (
+      {error && (
+        <p className="text-sm text-rose-700 rounded-[var(--radius-lg)] border border-rose-200 bg-rose-50 px-4 py-3">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <div className="grid place-items-center py-14 text-[var(--color-text-muted)]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : visible.length === 0 ? (
         <EmptyState />
       ) : (
         <ul className="flex flex-col gap-3">
           {visible.map((order) => {
             const isOpen = openId === order.id;
+            const tone = statusTone(order.status);
+            const items = itemsCache[order.id] ?? [];
             return (
               <li
                 key={order.id}
@@ -122,7 +190,7 @@ export default function OrdersPage() {
                 {/* Header row — always visible */}
                 <button
                   type="button"
-                  onClick={() => setOpenId(isOpen ? null : order.id)}
+                  onClick={() => expand(order.id)}
                   aria-expanded={isOpen}
                   className="w-full flex items-center gap-4 px-5 py-4 lg:px-7 lg:py-5 text-left hover:bg-[var(--color-bg-secondary)] transition-colors"
                 >
@@ -134,7 +202,8 @@ export default function OrdersPage() {
                       <span
                         className={cn(
                           "inline-flex items-center text-[10px] tracking-[0.25em] uppercase rounded-full px-2.5 py-1",
-                          statusTone(order.status),
+                          tone.bg,
+                          tone.text,
                         )}
                       >
                         {statusLabel(order.status)}
@@ -145,10 +214,7 @@ export default function OrdersPage() {
                         day: "2-digit",
                         month: "long",
                         year: "numeric",
-                      })}{" "}
-                      ·{" "}
-                      {order.items.reduce((sum, it) => sum + it.quantity, 0)}{" "}
-                      позицій
+                      })}
                     </p>
                   </div>
                   <span className="font-display text-base lg:text-lg font-semibold tabular-nums">
@@ -174,36 +240,43 @@ export default function OrdersPage() {
                       className="overflow-hidden"
                     >
                       <div className="px-5 pb-6 lg:px-7 lg:pb-7 border-t border-[var(--color-border-default)] pt-5">
-                        {/* Items list */}
-                        <ul className="flex flex-col gap-3">
-                          {order.items.map((it) => (
-                            <li
-                              key={
-                                it.slug + it.weightLabel + (it.roast ?? "")
-                              }
-                              className="flex items-center gap-4"
-                            >
-                              <span
-                                aria-hidden
-                                className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)]"
-                                style={{ backgroundImage: it.thumb }}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium leading-tight">
-                                  {it.name}
+                        {loadingItems === order.id && items.length === 0 ? (
+                          <div className="grid place-items-center py-8 text-[var(--color-text-muted)]">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        ) : items.length > 0 ? (
+                          <ul className="flex flex-col gap-3">
+                            {items.map((it) => (
+                              <li
+                                key={it.id}
+                                className="flex items-center gap-4"
+                              >
+                                <span
+                                  aria-hidden
+                                  className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]"
+                                  style={
+                                    it.thumb
+                                      ? { backgroundImage: it.thumb }
+                                      : undefined
+                                  }
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium leading-tight">
+                                    {it.productName}
+                                  </p>
+                                  <p className="text-xs text-[var(--color-text-muted)] mt-0.5 tabular-nums">
+                                    {it.weightLabel}
+                                    {it.roast ? ` · ${it.roast}` : ""} ·{" "}
+                                    {it.quantity} шт
+                                  </p>
+                                </div>
+                                <p className="text-sm font-display font-semibold tabular-nums shrink-0">
+                                  {formatPrice(it.lineTotal)}
                                 </p>
-                                <p className="text-xs text-[var(--color-text-muted)] mt-0.5 tabular-nums">
-                                  {it.weightLabel}
-                                  {it.roast ? ` · ${it.roast}` : ""} ·{" "}
-                                  {it.quantity} шт
-                                </p>
-                              </div>
-                              <p className="text-sm font-display font-semibold tabular-nums shrink-0">
-                                {formatPrice(it.unitPrice * it.quantity)}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
 
                         {/* Meta — delivery + tracking */}
                         <dl className="mt-6 grid sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
@@ -212,7 +285,9 @@ export default function OrdersPage() {
                               Доставка
                             </dt>
                             <dd className="mt-1 text-[var(--color-text-primary)]">
-                              {order.deliveryMethod} · {order.deliveryAddress}
+                              {order.deliveryMethod === "pickup"
+                                ? `Самовивіз · ${order.deliveryAddress}`
+                                : `${order.deliveryCity ? order.deliveryCity + ", " : ""}${order.deliveryAddress}`}
                             </dd>
                           </div>
                           {order.trackingNumber && (
@@ -230,10 +305,16 @@ export default function OrdersPage() {
 
                         {/* Actions */}
                         <div className="mt-6 flex flex-wrap items-center gap-3">
+                          <Link
+                            href={`/order/${order.number}`}
+                            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-5 py-2.5 text-sm hover:opacity-85 transition-opacity"
+                          >
+                            Деталі →
+                          </Link>
                           <button
                             type="button"
                             onClick={() => reorder(order)}
-                            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-5 py-2.5 text-sm hover:opacity-85 transition-opacity"
+                            className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] px-5 py-2.5 text-sm text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] transition-colors"
                           >
                             <RotateCcw className="h-3.5 w-3.5" />
                             Повторити замовлення
@@ -269,6 +350,12 @@ function EmptyState() {
       <p className="mt-2 text-sm text-[var(--color-text-secondary)] max-w-sm mx-auto leading-relaxed">
         Тут зʼявляться твої замовлення — пакування, відправлення, доставка.
       </p>
+      <Link
+        href="/shop"
+        className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-5 py-2.5 text-sm hover:opacity-85 transition-opacity"
+      >
+        У каталог
+      </Link>
     </div>
   );
 }

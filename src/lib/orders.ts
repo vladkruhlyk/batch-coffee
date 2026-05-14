@@ -194,6 +194,132 @@ function rowToItem(row: OrderItemRow): OrderItem {
 
 export type OrderSortField = "created_at" | "total";
 
+// ---------------------------------------------------------------------------
+// Create
+// ---------------------------------------------------------------------------
+
+export interface CreateOrderInput {
+  /** UUID of the customer placing the order. Null for guest checkout. */
+  userId: string | null;
+  recipientFirstName: string;
+  recipientLastName: string;
+  recipientPhone: string;
+  recipientEmail: string | null;
+  deliveryMethod: DeliveryMethod;
+  deliveryAddress: string;
+  deliveryCity: string | null;
+  paymentMethod: PaymentMethod;
+  comment: string | null;
+  deliveryFee: number;
+  discount?: number;
+  items: Array<{
+    productSlug: string;
+    productName: string;
+    thumb: string | null;
+    weightLabel: string;
+    weightGrams: number;
+    roast: string | null;
+    grind: string | null;
+    unitPrice: number;
+    quantity: number;
+  }>;
+}
+
+/** Create a new order plus its line items. Returns the freshly-minted
+ *  BAT-NNNN number so callers can redirect to /order/[number].
+ *
+ *  Done as two sequential inserts rather than a Postgres RPC for
+ *  simplicity — if the items insert fails after the header lands, we
+ *  surface the error to the caller; the orphan header is rare enough
+ *  to clean up by hand from /admin if it ever happens. When we adopt
+ *  paid-checkout we'll move this server-side anyway. */
+export async function createOrder(
+  input: CreateOrderInput,
+): Promise<{ id: string; number: string }> {
+  const subtotal = input.items.reduce(
+    (sum, i) => sum + i.unitPrice * i.quantity,
+    0,
+  );
+  const discount = input.discount ?? 0;
+  const total = subtotal + input.deliveryFee - discount;
+
+  const supabase = createSupabaseBrowserClient();
+
+  const { data: order, error: orderErr } = await supabase
+    .from("orders")
+    .insert({
+      user_id: input.userId,
+      subtotal,
+      delivery_fee: input.deliveryFee,
+      discount,
+      total,
+      delivery_method: input.deliveryMethod,
+      delivery_address: input.deliveryAddress,
+      delivery_city: input.deliveryCity,
+      payment_method: input.paymentMethod,
+      recipient_first_name: input.recipientFirstName,
+      recipient_last_name: input.recipientLastName,
+      recipient_phone: input.recipientPhone,
+      recipient_email: input.recipientEmail,
+      comment: input.comment,
+    })
+    .select("id, number")
+    .single();
+  if (orderErr || !order) {
+    throw orderErr ?? new Error("Failed to create order");
+  }
+
+  const itemsPayload = input.items.map((i) => ({
+    order_id: order.id,
+    product_slug: i.productSlug,
+    product_name: i.productName,
+    thumb: i.thumb,
+    weight_label: i.weightLabel,
+    weight_grams: i.weightGrams,
+    roast: i.roast,
+    grind: i.grind,
+    unit_price: i.unitPrice,
+    quantity: i.quantity,
+    line_total: i.unitPrice * i.quantity,
+  }));
+
+  const { error: itemsErr } = await supabase
+    .from("order_items")
+    .insert(itemsPayload);
+  if (itemsErr) throw itemsErr;
+
+  return { id: order.id, number: order.number as string };
+}
+
+/** Look up an order by its public BAT-NNNN number (returns null if RLS
+ *  hides it — wrong user, doesn't exist, etc). */
+export async function getOrderByNumber(
+  number: string,
+): Promise<OrderWithItems | null> {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("number", number)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { data: items, error: itemsErr } = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", (data as OrderRow).id)
+    .order("created_at", { ascending: true });
+  if (itemsErr) throw itemsErr;
+  return {
+    ...rowToOrder(data as OrderRow),
+    items: (items as OrderItemRow[]).map(rowToItem),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Read
+// ---------------------------------------------------------------------------
+
 /** List orders — newest first by default. Optional status filter,
  *  number search, custom sort. When called by a regular user RLS
  *  narrows the result to their own orders; admins see everything. */

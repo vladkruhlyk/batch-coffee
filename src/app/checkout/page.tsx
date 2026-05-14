@@ -3,34 +3,34 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
-import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
 import { useCart, getCartSubtotal } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
-import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
+import { createOrder } from "@/lib/orders";
 import { formatPrice, cn } from "@/lib/utils";
 
-type DeliveryMethod = "novaposhta-branch" | "novaposhta-postomat" | "pickup";
-type PaymentMethod = "card" | "cod"; // card via LiqPay, cod = on delivery
-
-const PICKUP_FEE = 0;
-
 /**
- * Checkout page — single-column form covering contacts, delivery, payment.
+ * Checkout page — пока работает только самовивіз + оплата при отриманні.
  *
- * Wire-style by design: groups stack vertically, the right-rail summary is
- * sticky on desktop, full bottom-bar on mobile. Submission is a mock today
- * (logs to console + routes to /order/success). When the backend lands the
- * `submit` handler becomes a `fetch("/api/orders", ...)` call.
+ * НП-доставка (відділення / поштомат) и онлайн-оплата картой закрыты
+ * плашкой «Тимчасово недоступно» — мы ждём API ключей от Нової Пошти
+ * и LiqPay соответственно. Кнопки видны, но disabled, чтобы клиент
+ * понимал что эти опции в работе.
  *
- * If the user is logged in we pre-fill phone from the auth store; if they
- * have a default address from /account/addresses we'd pre-fill that too —
- * for now we just leave fields blank and let them type. Pre-fill from
- * addresses is a clear next-step once Supabase is wired.
+ * Submit действительно создаёт row в `orders` + `order_items` через
+ * Supabase (RLS гарантирует, что user_id = auth.uid()). После успеха
+ * редиректим на `/order/[number]` где страница подтверждения читает
+ * заказ из БД и показывает реальный таймлайн статусов.
  */
+
+const PICKUP_ADDRESS = {
+  line1: "Київ, вул. Велика Васильківська, 24",
+  hours: "Щодня 8:00–22:00",
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const items = useCart((s) => s.items);
@@ -38,24 +38,20 @@ export default function CheckoutPage() {
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
 
-  // Form state — kept flat for simplicity. Group structure lives in the
-  // JSX, not in nested state objects.
+  // Form state — flat for simplicity. Pickup-only flow, so no city /
+  // destination fields.
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [city, setCity] = useState("");
-  const [destination, setDestination] = useState("");
-  const [delivery, setDelivery] = useState<DeliveryMethod>("novaposhta-branch");
-  const [payment, setPayment] = useState<PaymentMethod>("card");
   const [comment, setComment] = useState("");
   const [agreed, setAgreed] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Pre-fill the form when the auth-store hydrates with a real user.
-  // This is a legitimate use of useEffect: we're syncing local form
-  // state to an external store after async load. Form deps deliberately
-  // omitted — pre-fill fires once, then user edits take over.
+  // Legitimate cross-store sync — deps deliberately omitted, the fill
+  // runs once on hydration and lets the user edit freely afterwards.
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     if (hydrated && user) {
@@ -67,10 +63,18 @@ export default function CheckoutPage() {
   }, [hydrated, user]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
+  // Auth gate. Guest checkout would need a token-in-URL scheme for the
+  // confirmation page to be accessible later — defer until we wire
+  // real payments. For now: must be logged in.
+  useEffect(() => {
+    if (hydrated && !user) {
+      router.replace("/login?next=/checkout");
+    }
+  }, [hydrated, user, router]);
+
   const subtotal = getCartSubtotal(items);
-  const eligibleFree = subtotal >= FREE_SHIPPING_THRESHOLD;
-  const deliveryFee =
-    delivery === "pickup" ? PICKUP_FEE : eligibleFree ? 0 : DELIVERY_BASE;
+  // Pickup is free; that's the only delivery method available right now.
+  const deliveryFee = 0;
   const total = subtotal + deliveryFee;
 
   const canSubmit =
@@ -78,22 +82,48 @@ export default function CheckoutPage() {
     firstName.trim() &&
     lastName.trim() &&
     normalizePhone(phone).length >= 8 &&
-    (delivery === "pickup" || (city.trim() && destination.trim())) &&
     agreed &&
-    !submitting;
+    !submitting &&
+    !!user;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || !user) return;
     setSubmitting(true);
-    // Mock processing latency. Real flow:
-    //   1. POST /api/orders → creates order row, status="pending"
-    //   2. If payment=card → redirect to LiqPay form (or open widget)
-    //   3. On callback → status="paid", router.push to /order/success?id=...
-    await new Promise((r) => setTimeout(r, 900));
-    const fakeOrderId = `BAT-${Math.floor(Math.random() * 9000) + 1000}`;
-    clearCart();
-    router.push(`/order/success?order=${fakeOrderId}`);
+    setError(null);
+    try {
+      const { number } = await createOrder({
+        userId: user.id,
+        recipientFirstName: firstName.trim(),
+        recipientLastName: lastName.trim(),
+        recipientPhone: normalizePhone(phone),
+        recipientEmail: email.trim() || user.email || null,
+        deliveryMethod: "pickup",
+        deliveryAddress: PICKUP_ADDRESS.line1,
+        deliveryCity: "Київ",
+        paymentMethod: "cod",
+        comment: comment.trim() || null,
+        deliveryFee,
+        items: items.map((it) => ({
+          productSlug: it.slug,
+          productName: it.name,
+          thumb: it.thumb,
+          weightLabel: it.weightLabel,
+          weightGrams: it.weightGrams,
+          roast: it.roast ?? null,
+          grind: it.grind ?? null,
+          unitPrice: it.unitPrice,
+          quantity: it.quantity,
+        })),
+      });
+      clearCart();
+      router.push(`/order/${number}`);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Не вдалось оформити. Спробуй ще раз.",
+      );
+      setSubmitting(false);
+    }
   };
 
   // Empty cart edge case — bounce back to /cart so the user can't get
@@ -146,15 +176,31 @@ export default function CheckoutPage() {
             <span className="text-[var(--color-text-primary)]">Оформлення</span>
           </nav>
 
-          <header className="mb-12 lg:mb-16">
+          <header className="mb-10 lg:mb-12">
             <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.75rem)] leading-[1.02] tracking-[-0.04em]">
               Оформлення замовлення
             </h1>
             <p className="mt-3 text-[var(--color-text-secondary)] max-w-xl">
-              Кілька полів — і твоя кава поїде. Контакти зберігаються в
-              акаунті, наступного разу буде вдвічі швидше.
+              Заповни контакти — і кава чекатиме тебе в кав&apos;ярні.
             </p>
           </header>
+
+          {/* Banner — explains why some options are locked */}
+          <div className="mb-10 lg:mb-12 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-5 py-4 lg:px-6 lg:py-5 flex items-start gap-4">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]">
+              <Lock className="h-4 w-4" strokeWidth={1.6} />
+            </span>
+            <div className="text-sm leading-relaxed">
+              <p className="font-display font-semibold text-base">
+                Запускаємо потроху
+              </p>
+              <p className="mt-1 text-[var(--color-text-secondary)]">
+                Поки що працює самовивіз і оплата при отриманні.
+                Доставку Новою Поштою та оплату карткою підключаємо найближчим
+                часом — побачиш як тільки вони стануть доступні.
+              </p>
+            </div>
+          </div>
 
           <form
             onSubmit={submit}
@@ -166,7 +212,7 @@ export default function CheckoutPage() {
               <FormGroup
                 step="01"
                 title="Контакти"
-                subtitle="Дзвонимо лише за крайньої потреби — наприклад, якщо кур'єр не може знайти адресу."
+                subtitle="Дзвонимо лише за крайньої потреби — наприклад, якщо ти запізнюєшся забрати."
               >
                 <div className="grid sm:grid-cols-2 gap-5">
                   <Field
@@ -208,85 +254,68 @@ export default function CheckoutPage() {
               </FormGroup>
 
               {/* Group 2: Delivery */}
-              <FormGroup
-                step="02"
-                title="Доставка"
-                subtitle="Безкоштовно від 800 ₴ для відділень / поштоматів."
-              >
+              <FormGroup step="02" title="Доставка">
                 <div className="grid sm:grid-cols-3 gap-3 mb-6">
-                  <DeliveryOption
-                    label="НП відділення"
-                    sub="1–2 дні"
-                    active={delivery === "novaposhta-branch"}
-                    onClick={() => setDelivery("novaposhta-branch")}
-                  />
-                  <DeliveryOption
-                    label="НП поштомат"
-                    sub="1–2 дні"
-                    active={delivery === "novaposhta-postomat"}
-                    onClick={() => setDelivery("novaposhta-postomat")}
-                  />
                   <DeliveryOption
                     label="Самовивіз"
                     sub="Київ · сьогодні"
-                    active={delivery === "pickup"}
-                    onClick={() => setDelivery("pickup")}
+                    active
+                    available
+                    onClick={() => {
+                      /* only option right now */
+                    }}
+                  />
+                  <DeliveryOption
+                    label="НП відділення"
+                    sub="Скоро"
+                    active={false}
+                    available={false}
+                    onClick={() => {
+                      /* disabled */
+                    }}
+                  />
+                  <DeliveryOption
+                    label="НП поштомат"
+                    sub="Скоро"
+                    active={false}
+                    available={false}
+                    onClick={() => {
+                      /* disabled */
+                    }}
                   />
                 </div>
 
-                {delivery !== "pickup" ? (
-                  <div className="grid sm:grid-cols-2 gap-5">
-                    <Field
-                      id="city"
-                      label="Місто"
-                      value={city}
-                      onChange={setCity}
-                      autoComplete="address-level2"
-                      placeholder="Київ"
-                      required
-                    />
-                    <Field
-                      id="destination"
-                      label={
-                        delivery === "novaposhta-postomat"
-                          ? "Номер поштомату"
-                          : "Номер або адреса відділення"
-                      }
-                      value={destination}
-                      onChange={setDestination}
-                      placeholder={
-                        delivery === "novaposhta-postomat" ? "№312" : "№47, Хрещатик 22"
-                      }
-                      required
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-secondary)] px-5 py-4 text-sm leading-relaxed">
-                    <p className="font-display font-semibold text-base">
-                      Київ, вул. Велика Васильківська, 24
-                    </p>
-                    <p className="mt-1 text-[var(--color-text-secondary)]">
-                      Щодня 8:00–22:00 · Свіжообсмажене — зазвичай готове за
-                      1-2 години після оформлення
-                    </p>
-                  </div>
-                )}
+                <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-secondary)] px-5 py-4 text-sm leading-relaxed">
+                  <p className="font-display font-semibold text-base">
+                    {PICKUP_ADDRESS.line1}
+                  </p>
+                  <p className="mt-1 text-[var(--color-text-secondary)]">
+                    {PICKUP_ADDRESS.hours} · Свіжообсмажене — зазвичай готове за
+                    1–2 години після оформлення.
+                  </p>
+                </div>
               </FormGroup>
 
               {/* Group 3: Payment */}
               <FormGroup step="03" title="Оплата">
                 <div className="grid sm:grid-cols-2 gap-3">
                   <PaymentOption
-                    label="Картка онлайн"
-                    sub="LiqPay · Apple/Google Pay"
-                    active={payment === "card"}
-                    onClick={() => setPayment("card")}
+                    label="При отриманні"
+                    sub="Готівка або термінал у кав'ярні"
+                    active
+                    available
+                    onClick={() => {
+                      /* only option right now */
+                    }}
                   />
                   <PaymentOption
-                    label="При отриманні"
-                    sub="Готівка або термінал"
-                    active={payment === "cod"}
-                    onClick={() => setPayment("cod")}
+                    label="Картка онлайн"
+                    sub="Скоро · LiqPay · Apple/Google Pay"
+                    active={false}
+                    available={false}
+                    onClick={() => {
+                      /* disabled */
+                    }}
                   />
                 </div>
               </FormGroup>
@@ -297,7 +326,7 @@ export default function CheckoutPage() {
                   rows={3}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Подзвонити перед відправкою / просьба покласти подарунковий пакет / тощо"
+                  placeholder="Подарунковий пакет / помолоти на еспресо / тощо"
                   className="w-full rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-transparent p-4 text-sm focus:border-[var(--color-text-primary)] outline-none transition-colors resize-none"
                 />
               </FormGroup>
@@ -363,16 +392,6 @@ export default function CheckoutPage() {
                   ))}
                 </ul>
 
-                {/* Free-shipping progress in compact form — appears
-                    between item list and the price breakdown so the
-                    user sees the threshold one last time before
-                    confirming. Hidden on pickup since it doesn't apply. */}
-                {delivery !== "pickup" && (
-                  <div className="mt-5 pt-5 border-t border-[var(--color-border-default)]">
-                    <FreeShippingProgress amount={subtotal} variant="compact" />
-                  </div>
-                )}
-
                 <dl className="mt-5 pt-5 border-t border-[var(--color-border-default)] flex flex-col gap-2 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-[var(--color-text-secondary)]">
@@ -382,14 +401,10 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-[var(--color-text-secondary)]">
-                      Доставка
+                      Самовивіз
                     </dt>
-                    <dd className="tabular-nums">
-                      {deliveryFee === 0 ? (
-                        <span className="text-emerald-700">Безкоштовно</span>
-                      ) : (
-                        formatPrice(deliveryFee)
-                      )}
+                    <dd className="tabular-nums text-emerald-700">
+                      Безкоштовно
                     </dd>
                   </div>
                 </dl>
@@ -403,6 +418,12 @@ export default function CheckoutPage() {
                   </span>
                 </div>
 
+                {error && (
+                  <p className="mt-4 text-sm text-rose-700 rounded-[var(--radius-lg)] border border-rose-200 bg-rose-50 px-3 py-2">
+                    {error}
+                  </p>
+                )}
+
                 <button
                   type="submit"
                   disabled={!canSubmit}
@@ -412,7 +433,7 @@ export default function CheckoutPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {payment === "card" ? "Оплатити" : "Підтвердити"}
+                      Підтвердити замовлення
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
@@ -420,7 +441,7 @@ export default function CheckoutPage() {
 
                 <p className="mt-5 inline-flex items-center gap-2 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  Дані захищені · PCI-DSS на стороні провайдера
+                  Дані захищені · RLS на стороні бази
                 </p>
               </div>
             </aside>
@@ -514,11 +535,13 @@ function DeliveryOption({
   label,
   sub,
   active,
+  available,
   onClick,
 }: {
   label: string;
   sub: string;
   active: boolean;
+  available: boolean;
   onClick: () => void;
 }) {
   return (
@@ -526,18 +549,31 @@ function DeliveryOption({
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      disabled={!available}
       className={cn(
-        "rounded-[var(--radius-lg)] border px-5 py-4 text-left transition-all duration-300",
-        active
+        "relative rounded-[var(--radius-lg)] border px-5 py-4 text-left transition-all duration-300",
+        active && available
           ? "border-[var(--color-text-primary)] bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
-          : "border-[var(--color-border-strong)] hover:border-[var(--color-text-primary)]",
+          : available
+            ? "border-[var(--color-border-strong)] hover:border-[var(--color-text-primary)]"
+            : "border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] cursor-not-allowed",
       )}
     >
+      {!available && (
+        <Lock
+          className="absolute top-3 right-3 h-3.5 w-3.5 opacity-60"
+          strokeWidth={1.6}
+        />
+      )}
       <p className="font-display font-semibold text-base">{label}</p>
       <p
         className={cn(
           "mt-1 text-xs",
-          active ? "text-white/60" : "text-[var(--color-text-muted)]",
+          active && available
+            ? "text-white/60"
+            : !available
+              ? "text-[var(--color-text-muted)]"
+              : "text-[var(--color-text-muted)]",
         )}
       >
         {sub}
@@ -550,11 +586,13 @@ function PaymentOption({
   label,
   sub,
   active,
+  available,
   onClick,
 }: {
   label: string;
   sub: string;
   active: boolean;
+  available: boolean;
   onClick: () => void;
 }) {
   return (
@@ -562,18 +600,29 @@ function PaymentOption({
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      disabled={!available}
       className={cn(
-        "rounded-[var(--radius-lg)] border px-5 py-4 text-left transition-all duration-300",
-        active
+        "relative rounded-[var(--radius-lg)] border px-5 py-4 text-left transition-all duration-300",
+        active && available
           ? "border-[var(--color-text-primary)] bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
-          : "border-[var(--color-border-strong)] hover:border-[var(--color-text-primary)]",
+          : available
+            ? "border-[var(--color-border-strong)] hover:border-[var(--color-text-primary)]"
+            : "border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] cursor-not-allowed",
       )}
     >
+      {!available && (
+        <Lock
+          className="absolute top-3 right-3 h-3.5 w-3.5 opacity-60"
+          strokeWidth={1.6}
+        />
+      )}
       <p className="font-display font-semibold text-base">{label}</p>
       <p
         className={cn(
           "mt-1 text-xs",
-          active ? "text-white/60" : "text-[var(--color-text-muted)]",
+          active && available
+            ? "text-white/60"
+            : "text-[var(--color-text-muted)]",
         )}
       >
         {sub}

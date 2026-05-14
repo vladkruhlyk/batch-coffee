@@ -96,7 +96,7 @@ function LoginInner() {
                   key="code-email"
                   destination={pendingEmail}
                   destinationLabel="email"
-                  codeLength={6}
+                  codeLength={8}
                   error={error}
                   errorBump={errorBump}
                   onVerify={verifyEmailCode}
@@ -552,12 +552,18 @@ function CodeStep({
     setResendIn(RESEND_SECONDS);
   };
 
-  // 6 digits is tight on narrow phones — shrink the cells a notch so the
-  // row still fits inside the 320px–360px content column.
+  // Cells scale down as count goes up so the whole row still fits inside
+  // the ~312px content column on a 360px viewport.
+  //   - 4 cells (phone mock): roomy.
+  //   - 6 cells: slim.
+  //   - 8 cells (current Supabase email default): tightest, with extra
+  //     responsive bump-ups at sm/lg breakpoints.
   const cellClasses =
-    codeLength >= 6
-      ? "h-14 w-10 sm:h-16 sm:w-12 lg:h-20 lg:w-14 text-2xl lg:text-3xl"
-      : "h-16 w-14 lg:h-20 lg:w-16 text-3xl lg:text-4xl";
+    codeLength >= 8
+      ? "h-12 w-8 sm:h-14 sm:w-10 lg:h-16 lg:w-12 text-xl lg:text-2xl"
+      : codeLength >= 6
+        ? "h-14 w-10 sm:h-16 sm:w-12 lg:h-20 lg:w-14 text-2xl lg:text-3xl"
+        : "h-16 w-14 lg:h-20 lg:w-16 text-3xl lg:text-4xl";
 
   return (
     <motion.section
@@ -596,7 +602,13 @@ function CodeStep({
         . Введи {codeLength} цифр нижче.
       </p>
 
-      <div className="mt-10 flex gap-2 sm:gap-3" onPaste={handlePaste}>
+      <div
+        className={cn(
+          "mt-10 flex",
+          codeLength >= 8 ? "gap-1.5 sm:gap-2" : "gap-2 sm:gap-3",
+        )}
+        onPaste={handlePaste}
+      >
         {digits.map((d, i) => (
           <input
             key={i}

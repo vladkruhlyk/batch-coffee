@@ -1,48 +1,156 @@
 "use client";
 
-import { useState } from "react";
-import { Building2, Home, MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Building2,
+  Home,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getMockAddresses, type MockAddress } from "@/data/mock-account";
+import {
+  createAddress,
+  deleteAddress,
+  listAddresses,
+  setDefaultAddress,
+  updateAddress,
+  type Address,
+  type AddressInput,
+  type AddressLabel,
+} from "@/lib/addresses";
+import { useAuth } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 
 /**
  * Addresses tab — manage saved delivery destinations.
  *
- * Local CRUD only (mock-mode). Each operation maps 1:1 to a future
- * Supabase row mutation:
- *   - add        → INSERT INTO addresses
- *   - remove     → DELETE WHERE id = ...
- *   - setDefault → UPDATE addresses SET is_default = (id = ?)
- *   - update     → UPDATE WHERE id = ...
- * The component state is keyed on the address `id` so re-renders stay
- * stable when the real API takes over.
+ * Now backed by the `addresses` Supabase table (RLS-gated to the
+ * current user). The page handles four operations:
+ *   - add        → createAddress
+ *   - remove     → deleteAddress
+ *   - update     → updateAddress
+ *   - setDefault → setDefaultAddress (two-step under the hood)
+ *
+ * Optimistic UI isn't necessary here — the latency is well under the
+ * "feels slow" threshold and a failed mutation is easier to recover
+ * from when the visible state still reflects the server.
  */
 export default function AddressesPage() {
-  const [items, setItems] = useState<MockAddress[]>(() => getMockAddresses());
-  const [editing, setEditing] = useState<MockAddress | null>(null);
+  const user = useAuth((s) => s.user);
+  const hydrated = useAuth((s) => s.hydrated);
+
+  const [items, setItems] = useState<Address[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Address | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  const setDefault = (id: string) => {
-    setItems((prev) =>
-      prev.map((a) => ({ ...a, isDefault: a.id === id })),
-    );
-  };
+  // Initial load. The auth guard in AccountShell already ensures `user`
+  // is present before this page renders, but we still wait on hydration
+  // so RLS sees the right session cookie. `loading` starts true so
+  // there's no flash of "empty" before the first fetch resolves.
+  useEffect(() => {
+    if (!hydrated || !user) return;
+    let cancelled = false;
+    listAddresses()
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(messageOf(e));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, user]);
 
-  const remove = (id: string) => {
-    setItems((prev) => prev.filter((a) => a.id !== id));
-  };
+  const setDefault = useCallback(
+    async (id: string) => {
+      if (!user) return;
+      setBusyId(id);
+      setError(null);
+      try {
+        await setDefaultAddress(user.id, id);
+        setItems((prev) =>
+          prev.map((a) => ({ ...a, isDefault: a.id === id })),
+        );
+      } catch (e) {
+        setError(messageOf(e));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [user],
+  );
 
-  const upsert = (next: MockAddress) => {
-    setItems((prev) => {
-      const exists = prev.some((a) => a.id === next.id);
-      if (exists) return prev.map((a) => (a.id === next.id ? next : a));
-      return [...prev, next];
-    });
-    setEditing(null);
-    setShowForm(false);
-  };
+  const remove = useCallback(async (id: string) => {
+    setBusyId(id);
+    setError(null);
+    try {
+      await deleteAddress(id);
+      setItems((prev) => prev.filter((a) => a.id !== id));
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const upsert = useCallback(
+    async (next: AddressInput, existingId: string | null) => {
+      if (!user) return;
+      setError(null);
+      try {
+        if (existingId) {
+          const updated = await updateAddress(existingId, next);
+          setItems((prev) =>
+            prev.map((a) =>
+              a.id === existingId ? { ...updated, isDefault: a.isDefault } : a,
+            ),
+          );
+        } else {
+          // First-ever address auto-becomes the default — it's the only
+          // one we have, no point making the user toggle it themselves.
+          const shouldBeDefault = items.length === 0 || next.isDefault === true;
+          if (shouldBeDefault) {
+            // Clear any existing default first so the partial unique
+            // index doesn't trip. (No-op if list was empty.)
+            await Promise.all(
+              items
+                .filter((a) => a.isDefault)
+                .map((a) => setDefaultAddress(user.id, a.id)),
+            );
+          }
+          const created = await createAddress(user.id, {
+            ...next,
+            isDefault: shouldBeDefault,
+          });
+          setItems((prev) => {
+            const without = shouldBeDefault
+              ? prev.map((a) => ({ ...a, isDefault: false }))
+              : prev;
+            return [...without, created];
+          });
+        }
+        setEditing(null);
+        setShowForm(false);
+      } catch (e) {
+        setError(messageOf(e));
+      }
+    },
+    [items, user],
+  );
 
   return (
     <div className="flex flex-col gap-7">
@@ -84,20 +192,35 @@ export default function AddressesPage() {
                 setEditing(null);
                 setShowForm(false);
               }}
-              onSubmit={upsert}
+              onSubmit={(input) =>
+                upsert(input, editing ? editing.id : null)
+              }
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {items.length === 0 ? (
+      {error && (
+        <p className="text-sm text-rose-700 rounded-[var(--radius-lg)] border border-rose-200 bg-rose-50 px-4 py-3">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <div className="grid place-items-center py-14 text-[var(--color-text-muted)]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : items.length === 0 ? (
         <EmptyState onAdd={() => setShowForm(true)} />
       ) : (
         <ul className="grid sm:grid-cols-2 gap-4">
           {items.map((addr) => (
             <li
               key={addr.id}
-              className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] p-5 lg:p-6 flex flex-col gap-4"
+              className={cn(
+                "rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] p-5 lg:p-6 flex flex-col gap-4 transition-opacity",
+                busyId === addr.id && "opacity-60 pointer-events-none",
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <span className="inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
@@ -171,31 +294,43 @@ function AddressForm({
   onCancel,
   onSubmit,
 }: {
-  initial: MockAddress | null;
+  initial: Address | null;
   onCancel: () => void;
-  onSubmit: (addr: MockAddress) => void;
+  onSubmit: (input: AddressInput) => Promise<void> | void;
 }) {
-  // `Date.now()` inside the useState arg would be called during render —
-  // React 19 flags it as "impure during render". Wrap in a lazy initializer
-  // so it runs exactly once when the component mounts.
-  const [form, setForm] = useState<MockAddress>(() =>
-    initial ?? {
-      id: `addr-${Date.now()}`,
-      label: "Дім",
-      recipient: "",
-      phone: "",
-      city: "",
-      destination: "",
-      isDefault: false,
-    },
+  const [form, setForm] = useState<AddressInput>(() =>
+    initial
+      ? {
+          label: initial.label,
+          recipient: initial.recipient,
+          phone: initial.phone,
+          city: initial.city,
+          destination: initial.destination,
+          isDefault: initial.isDefault,
+        }
+      : {
+          label: "Дім",
+          recipient: "",
+          phone: "",
+          city: "",
+          destination: "",
+          isDefault: false,
+        },
   );
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!form.recipient || !form.phone || !form.city || !form.destination) {
       return;
     }
-    onSubmit(form);
+    setSubmitting(true);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -209,7 +344,7 @@ function AddressForm({
 
       {/* Label selector */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {(["Дім", "Робота", "Інше"] as const).map((lbl) => (
+        {(["Дім", "Робота", "Інше"] as AddressLabel[]).map((lbl) => (
           <button
             key={lbl}
             type="button"
@@ -273,14 +408,20 @@ function AddressForm({
       <div className="mt-7 flex flex-wrap gap-3">
         <button
           type="submit"
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-6 py-3 text-sm hover:opacity-85 transition-opacity"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-6 py-3 text-sm hover:opacity-85 disabled:opacity-60 disabled:cursor-wait transition-opacity"
         >
-          Зберегти
+          {submitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            "Зберегти"
+          )}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] px-6 py-3 text-sm hover:border-[var(--color-text-primary)] transition-colors"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] px-6 py-3 text-sm hover:border-[var(--color-text-primary)] disabled:opacity-60 transition-colors"
         >
           Скасувати
         </button>
@@ -322,7 +463,7 @@ function FormField({
   );
 }
 
-function LabelIcon({ label }: { label: MockAddress["label"] }) {
+function LabelIcon({ label }: { label: AddressLabel }) {
   switch (label) {
     case "Дім":
       return <Home className="h-3.5 w-3.5" />;
@@ -350,4 +491,14 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       </button>
     </div>
   );
+}
+
+/** Pull a human-readable string out of whatever Supabase / fetch threw. */
+function messageOf(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e && "message" in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return "Щось пішло не так. Спробуй ще раз.";
 }

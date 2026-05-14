@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  CircleDot,
+  ClipboardList,
   Loader2,
   Mail,
   MapPin,
@@ -17,12 +19,15 @@ import {
   ORDER_STATUSES,
   deliveryMethodLabel,
   getOrderWithItems,
+  listOrderStatusEvents,
   paymentMethodLabel,
   statusLabel,
   statusTone,
+  updateOrderInternalNote,
   updateOrderStatus,
   updateOrderTracking,
   type OrderStatus,
+  type OrderStatusEvent,
   type OrderWithItems,
 } from "@/lib/orders";
 import { cn, formatPrice } from "@/lib/utils";
@@ -43,20 +48,25 @@ export default function AdminOrderDetailPage() {
   const id = params.id;
 
   const [order, setOrder] = useState<OrderWithItems | null>(null);
+  const [events, setEvents] = useState<OrderStatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingTracking, setSavingTracking] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
   const [trackingDraft, setTrackingDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    getOrderWithItems(id)
-      .then((data) => {
+    Promise.all([getOrderWithItems(id), listOrderStatusEvents(id)])
+      .then(([data, evs]) => {
         if (cancelled) return;
         setOrder(data);
+        setEvents(evs);
         setTrackingDraft(data?.trackingNumber ?? "");
+        setNoteDraft(data?.internalNote ?? "");
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -78,7 +88,10 @@ export default function AdminOrderDetailPage() {
       setError(null);
       try {
         await updateOrderStatus(order.id, next);
+        // Refetch the timeline — the trigger appended a new event.
+        const fresh = await listOrderStatusEvents(order.id);
         setOrder((prev) => (prev ? { ...prev, status: next } : prev));
+        setEvents(fresh);
       } catch (e) {
         setError(messageOf(e));
       } finally {
@@ -105,6 +118,24 @@ export default function AdminOrderDetailPage() {
       setSavingTracking(false);
     }
   }, [order, trackingDraft]);
+
+  const handleNoteSave = useCallback(async () => {
+    if (!order) return;
+    const next = noteDraft;
+    if ((next || null) === (order.internalNote ?? null)) return;
+    setSavingNote(true);
+    setError(null);
+    try {
+      await updateOrderInternalNote(order.id, next);
+      setOrder((prev) =>
+        prev ? { ...prev, internalNote: next.trim() || null } : prev,
+      );
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setSavingNote(false);
+    }
+  }, [order, noteDraft]);
 
   if (loading) {
     return (
@@ -340,6 +371,125 @@ export default function AdminOrderDetailPage() {
         </div>
       </section>
 
+      {/* Two-column row: internal note + status timeline */}
+      <div className="grid lg:grid-cols-2 gap-5 lg:gap-6">
+        {/* Internal note — staff only */}
+        <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] p-5 lg:p-6">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <span className="inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.6} />
+              Внутрішня примітка
+            </span>
+            <span className="text-[10px] tracking-[0.2em] uppercase rounded-full bg-amber-100 text-amber-800 px-2 py-1">
+              Тільки для команди
+            </span>
+          </div>
+          <textarea
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            rows={4}
+            placeholder="Напр. «Дзвонив, просить доставити після 18:00»"
+            className="w-full text-sm bg-transparent border border-[var(--color-border-default)] rounded-[var(--radius-lg)] p-3 focus:border-[var(--color-text-primary)] outline-none transition-colors resize-y"
+          />
+          <div className="mt-3 flex items-center justify-end gap-3">
+            {noteDraft !== (order.internalNote ?? "") && (
+              <button
+                type="button"
+                onClick={() => setNoteDraft(order.internalNote ?? "")}
+                disabled={savingNote}
+                className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-50 transition-colors"
+              >
+                Скасувати
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleNoteSave}
+              disabled={
+                savingNote || noteDraft === (order.internalNote ?? "")
+              }
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-5 py-2 text-xs tracking-[0.12em] uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-85 transition-opacity"
+            >
+              {savingNote ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} /> Зберегти
+                </>
+              )}
+            </button>
+          </div>
+        </section>
+
+        {/* Status timeline */}
+        <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] p-5 lg:p-6">
+          <span className="inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
+            <CircleDot className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Історія статусів
+          </span>
+          {events.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
+              Поки що нема змін.
+            </p>
+          ) : (
+            <ol className="mt-4 relative">
+              {/* Vertical guide line behind the dots */}
+              <span
+                aria-hidden
+                className="absolute left-[7px] top-2 bottom-2 w-px bg-[var(--color-border-default)]"
+              />
+              {events.map((event, idx) => {
+                const tone = statusTone(event.toStatus);
+                const isLatest = idx === events.length - 1;
+                return (
+                  <li
+                    key={event.id}
+                    className="relative pl-7 pb-4 last:pb-0 text-sm"
+                  >
+                    <span
+                      className={cn(
+                        "absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full border-2",
+                        isLatest
+                          ? "bg-[var(--color-text-primary)] border-[var(--color-text-primary)]"
+                          : "bg-[var(--color-bg-primary)] border-[var(--color-border-strong)]",
+                      )}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {event.fromStatus ? (
+                        <>
+                          <span className="text-[var(--color-text-muted)]">
+                            {statusLabel(event.fromStatus)}
+                          </span>
+                          <span className="text-[var(--color-text-muted)]">
+                            →
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[var(--color-text-muted)]">
+                          Створено →
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "inline-flex items-center text-[10px] tracking-[0.2em] uppercase rounded-full px-2 py-0.5",
+                          tone.bg,
+                          tone.text,
+                        )}
+                      >
+                        {statusLabel(event.toStatus)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--color-text-muted)] tabular-nums">
+                      {formatDateTime(event.createdAt)}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
+      </div>
+
       {/* Customer comment */}
       {order.comment && (
         <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-5 lg:p-6">
@@ -411,6 +561,15 @@ function formatDate(iso: string): string {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "short",
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));

@@ -60,9 +60,21 @@ export interface Order {
   recipientPhone: string;
   recipientEmail: string | null;
   comment: string | null;
+  /** Staff-only note — never shown to the customer. */
+  internalNote: string | null;
   trackingNumber: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrderStatusEvent {
+  id: string;
+  orderId: string;
+  fromStatus: OrderStatus | null;
+  toStatus: OrderStatus;
+  changedBy: string | null;
+  note: string | null;
+  createdAt: string;
 }
 
 export interface OrderWithItems extends Order {
@@ -91,9 +103,20 @@ interface OrderRow {
   recipient_phone: string;
   recipient_email: string | null;
   comment: string | null;
+  internal_note: string | null;
   tracking_number: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface OrderStatusEventRow {
+  id: string;
+  order_id: string;
+  from_status: OrderStatus | null;
+  to_status: OrderStatus;
+  changed_by: string | null;
+  note: string | null;
+  created_at: string;
 }
 
 interface OrderItemRow {
@@ -130,9 +153,22 @@ function rowToOrder(row: OrderRow): Order {
     recipientPhone: row.recipient_phone,
     recipientEmail: row.recipient_email,
     comment: row.comment,
+    internalNote: row.internal_note,
     trackingNumber: row.tracking_number,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function rowToStatusEvent(row: OrderStatusEventRow): OrderStatusEvent {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    changedBy: row.changed_by,
+    note: row.note,
+    createdAt: row.created_at,
   };
 }
 
@@ -156,24 +192,47 @@ function rowToItem(row: OrderItemRow): OrderItem {
 // Queries
 // ---------------------------------------------------------------------------
 
-/** List orders — newest first. Optional status filter + number search.
- *  When called by a regular user RLS narrows the result to their own
- *  orders; admins see everything. */
+export type OrderSortField = "created_at" | "total";
+
+/** List orders — newest first by default. Optional status filter,
+ *  number search, custom sort. When called by a regular user RLS
+ *  narrows the result to their own orders; admins see everything. */
 export async function listOrders(opts?: {
   status?: OrderStatus | null;
   search?: string;
+  sortBy?: OrderSortField;
+  sortDir?: "asc" | "desc";
+  /** Limit + offset for cheap pagination on the dashboard. */
+  limit?: number;
 }): Promise<Order[]> {
   const supabase = createSupabaseBrowserClient();
+  const sortField = opts?.sortBy ?? "created_at";
+  const ascending = opts?.sortDir === "asc";
   let q = supabase
     .from("orders")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order(sortField, { ascending });
   if (opts?.status) q = q.eq("status", opts.status);
   if (opts?.search) {
-    // Case-insensitive prefix match on the human-readable number.
+    // Case-insensitive substring match on the human-readable number.
     q = q.ilike("number", `%${opts.search}%`);
   }
+  if (opts?.limit) q = q.limit(opts.limit);
   const { data, error } = await q;
+  if (error) throw error;
+  return (data as OrderRow[]).map(rowToOrder);
+}
+
+/** List orders owned by a specific user — admin-only path used by the
+ *  customer detail page. Regular users hit the unfiltered `listOrders`
+ *  and RLS does the narrowing for them. */
+export async function listOrdersForUser(userId: string): Promise<Order[]> {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return (data as OrderRow[]).map(rowToOrder);
 }
@@ -226,6 +285,34 @@ export async function updateOrderTracking(
     .update({ tracking_number: trackingNumber || null })
     .eq("id", id);
   if (error) throw error;
+}
+
+/** Admin-only — internal staff note. Empty string clears the field. */
+export async function updateOrderInternalNote(
+  id: string,
+  note: string | null,
+): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({ internal_note: note?.trim() || null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Chronological status history for one order. Older events first
+ *  so the UI can render top-to-bottom timelines without reversing. */
+export async function listOrderStatusEvents(
+  orderId: string,
+): Promise<OrderStatusEvent[]> {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("order_status_events")
+    .select("*")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as OrderStatusEventRow[]).map(rowToStatusEvent);
 }
 
 // ---------------------------------------------------------------------------

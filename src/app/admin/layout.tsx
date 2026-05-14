@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ReactNode } from "react";
-import { LogOut, PackageOpen } from "lucide-react";
+import { LayoutDashboard, LogOut, PackageOpen, Users } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout/container";
 
@@ -63,11 +63,25 @@ export default async function AdminLayout({
               </Link>
               <nav className="hidden sm:flex items-center gap-1 text-sm">
                 <Link
+                  href="/admin"
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
+                  <LayoutDashboard className="h-4 w-4" strokeWidth={1.6} />
+                  Огляд
+                </Link>
+                <Link
                   href="/admin/orders"
                   className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                 >
                   <PackageOpen className="h-4 w-4" strokeWidth={1.6} />
                   Замовлення
+                </Link>
+                <Link
+                  href="/admin/customers"
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
+                  <Users className="h-4 w-4" strokeWidth={1.6} />
+                  Клієнти
                 </Link>
               </nav>
             </div>

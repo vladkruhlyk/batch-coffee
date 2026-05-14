@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Search } from "lucide-react";
 import {
   listOrders,
   statusLabel,
   statusTone,
   ORDER_STATUSES,
   type Order,
+  type OrderSortField,
   type OrderStatus,
 } from "@/lib/orders";
 import { formatPrice, cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export default function AdminOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<OrderStatus | "all">("all");
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<OrderSortField>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   // Debounce the search input so each keystroke doesn't fire a query.
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -44,6 +47,8 @@ export default function AdminOrdersPage() {
     listOrders({
       status: status === "all" ? null : status,
       search: debouncedSearch || undefined,
+      sortBy,
+      sortDir,
     })
       .then((data) => {
         if (!cancelled) setOrders(data);
@@ -59,7 +64,18 @@ export default function AdminOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [status, debouncedSearch]);
+  }, [status, debouncedSearch, sortBy, sortDir]);
+
+  /** Toggle direction if same column is clicked, otherwise switch
+   *  column and reset to desc. Matches what every spreadsheet does. */
+  const handleSort = (field: OrderSortField) => {
+    if (sortBy === field) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortDir("desc");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -113,7 +129,12 @@ export default function AdminOrdersPage() {
       ) : orders.length === 0 ? (
         <EmptyState filtered={status !== "all" || !!debouncedSearch} />
       ) : (
-        <OrdersTable orders={orders} />
+        <OrdersTable
+          orders={orders}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+        />
       )}
     </div>
   );
@@ -121,7 +142,17 @@ export default function AdminOrdersPage() {
 
 // ---------------------------------------------------------------------------
 
-function OrdersTable({ orders }: { orders: Order[] }) {
+function OrdersTable({
+  orders,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  orders: Order[];
+  sortBy: OrderSortField;
+  sortDir: "asc" | "desc";
+  onSort: (field: OrderSortField) => void;
+}) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)]">
       <table className="w-full text-sm">
@@ -129,9 +160,24 @@ function OrdersTable({ orders }: { orders: Order[] }) {
           <tr className="text-left text-[11px] tracking-[0.18em] uppercase text-[var(--color-text-muted)] border-b border-[var(--color-border-default)]">
             <th className="py-3 px-5 font-medium">Номер</th>
             <th className="py-3 px-5 font-medium">Клієнт</th>
-            <th className="py-3 px-5 font-medium">Дата</th>
+            <th className="py-3 px-5 font-medium">
+              <SortButton
+                label="Дата"
+                active={sortBy === "created_at"}
+                dir={sortDir}
+                onClick={() => onSort("created_at")}
+              />
+            </th>
             <th className="py-3 px-5 font-medium">Статус</th>
-            <th className="py-3 px-5 font-medium text-right">Сума</th>
+            <th className="py-3 px-5 font-medium text-right">
+              <SortButton
+                label="Сума"
+                active={sortBy === "total"}
+                dir={sortDir}
+                onClick={() => onSort("total")}
+                align="right"
+              />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -141,6 +187,44 @@ function OrdersTable({ orders }: { orders: Order[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function SortButton({
+  label,
+  active,
+  dir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+  align?: "left" | "right";
+}) {
+  const Icon = dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 tracking-[0.18em] uppercase transition-colors",
+        align === "right" && "flex-row-reverse",
+        active
+          ? "text-[var(--color-text-primary)]"
+          : "hover:text-[var(--color-text-primary)]",
+      )}
+    >
+      {label}
+      <Icon
+        className={cn(
+          "h-3 w-3 transition-opacity",
+          active ? "opacity-100" : "opacity-30",
+        )}
+        strokeWidth={2}
+      />
+    </button>
   );
 }
 

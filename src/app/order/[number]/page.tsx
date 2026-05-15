@@ -45,10 +45,29 @@ import { cn, formatPrice } from "@/lib/utils";
 export default function OrderDetailPage() {
   // useSearchParams is CSR-only; wrap so the static prerender pass
   // doesn't complain about it being called outside of <Suspense>.
+  //
+  // Fallback is a tall spinner-shaped frame instead of null so the
+  // footer doesn't ride up under the header while the params resolve.
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSpinner />}>
       <OrderDetailInner />
     </Suspense>
+  );
+}
+
+function PageSpinner() {
+  return (
+    <>
+      <Header />
+      <main className="flex-1 bg-[var(--color-bg-primary)]">
+        <Container size="default" className="pt-28 lg:pt-36 pb-24">
+          <div className="min-h-[60vh] grid place-items-center text-[var(--color-text-muted)]">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        </Container>
+      </main>
+      <Footer />
+    </>
   );
 }
 

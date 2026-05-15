@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import {
   LayoutDashboard,
+  Loader2,
   LogOut,
   PackageOpen,
   Repeat,
@@ -90,10 +91,19 @@ export function AccountShell({ children }: AccountShellProps) {
     }
   }, [hydrated, user, router, pathname]);
 
-  // Pre-hydration / unauthenticated → keep the page empty so we don't paint
-  // a half-rendered cabinet that flashes away when the redirect kicks in.
+  // Pre-hydration / unauthenticated → don't paint the cabinet, but
+  // also DON'T return null: that collapses the page to header+footer,
+  // and the footer pops up right under the navbar for a beat before
+  // the real content (or redirect) lands. Render a tall spinner-
+  // shaped placeholder so the page-height stays stable.
   if (!hydrated || !user) {
-    return null;
+    return (
+      <Container size="wide" className="pt-28 lg:pt-36 pb-[var(--section-gap)]">
+        <div className="min-h-[60vh] grid place-items-center text-[var(--color-text-muted)]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      </Container>
+    );
   }
 
   // Greeting falls back through name → phone → email. Anonymous-feel

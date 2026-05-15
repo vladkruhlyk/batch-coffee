@@ -174,9 +174,13 @@ export default function CheckoutPage() {
       // guests reach the same page.
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Не вдалось оформити. Спробуй ще раз.",
-      );
+      // Surface the underlying error rather than a generic line — saves
+      // a debugging round-trip when a migration is missing, RLS rejects,
+      // or Supabase is down. Worst case it's slightly technical, but
+      // better than "спробуй ще раз" with no clue why.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("Order submission failed:", e);
+      setError(`Не вдалось оформити: ${detail}`);
       setSubmitting(false);
     }
   };

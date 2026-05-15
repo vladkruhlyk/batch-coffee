@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { ArrowRight, Gift, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -28,8 +28,8 @@ import { formatPrice, cn } from "@/lib/utils";
  */
 
 const PICKUP_ADDRESS = {
-  line1: "Київ, вул. Велика Васильківська, 24",
-  hours: "Щодня 8:00–22:00",
+  line1: "Полтава, вул. Соборності, 27",
+  hours: "Пн–Нд · 08:00–20:00",
 };
 
 export default function CheckoutPage() {
@@ -72,14 +72,11 @@ export default function CheckoutPage() {
   }, [hydrated, user]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
-  // Auth gate. Guest checkout would need a token-in-URL scheme for the
-  // confirmation page to be accessible later — defer until we wire
-  // real payments. For now: must be logged in.
-  useEffect(() => {
-    if (hydrated && !user) {
-      router.replace("/login?next=/checkout");
-    }
-  }, [hydrated, user, router]);
+  // Guest checkout is allowed — order rows get user_id=null and stay
+  // visible on /order/[number] via the matching RLS branch (anon sees
+  // anon orders by URL). Customers who log in get the order tied to
+  // their account and visible from /account/orders; guests just trust
+  // the URL. The banner below nudges them to sign up for loyalty.
 
   // Re-validate cart prices against live Sanity values once on mount.
   // Cart items snapshot unit prices at add-time and can drift if admin
@@ -133,21 +130,23 @@ export default function CheckoutPage() {
     lastName.trim() &&
     normalizePhone(phone).length >= 8 &&
     agreed &&
-    !submitting &&
-    !!user;
+    !submitting;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !user) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      const { number } = await createOrder({
-        userId: user.id,
+      const { number, viewToken } = await createOrder({
+        // Logged in → tie the order to the profile so it shows up
+        // in /account/orders. Guest → null, the order is only
+        // reachable via the /order/[number] URL.
+        userId: user?.id ?? null,
         recipientFirstName: firstName.trim(),
         recipientLastName: lastName.trim(),
         recipientPhone: normalizePhone(phone),
-        recipientEmail: email.trim() || user.email || null,
+        recipientEmail: email.trim() || user?.email || null,
         deliveryMethod: "pickup",
         deliveryAddress: PICKUP_ADDRESS.line1,
         deliveryCity: "Київ",
@@ -169,7 +168,11 @@ export default function CheckoutPage() {
         })),
       });
       clearCart();
-      router.push(`/order/${number}`);
+      // Always include the view token. Logged-in customers don't need
+      // it (RLS would let them in anyway) but having it in the URL
+      // lets them share the link with a guest viewer, and matches how
+      // guests reach the same page.
+      router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Не вдалось оформити. Спробуй ще раз.",
@@ -236,6 +239,32 @@ export default function CheckoutPage() {
               Заповни контакти — і кава чекатиме тебе в кав&apos;ярні.
             </p>
           </header>
+
+          {/* Guest nudge — visible only to anonymous customers. Frames
+              login as a perk (bonus accrual) rather than a requirement,
+              so people who just want to grab coffee aren't forced. */}
+          {hydrated && !user && (
+            <div className="mb-6 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] px-5 py-4 lg:px-6 lg:py-5 flex flex-wrap items-center justify-between gap-3">
+              <p className="flex items-center gap-3 text-sm">
+                <Gift className="h-5 w-5 shrink-0 text-emerald-700" strokeWidth={1.6} />
+                <span>
+                  <span className="font-display font-semibold">
+                    Оформляєш як гість.
+                  </span>{" "}
+                  <span className="text-[var(--color-text-secondary)]">
+                    Зареєструйся — і кожне замовлення буде накопичувати
+                    бонуси на знижку.
+                  </span>
+                </span>
+              </p>
+              <Link
+                href="/login?next=/checkout"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] px-5 py-2 text-xs tracking-[0.18em] uppercase text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] transition-colors"
+              >
+                Увійти
+              </Link>
+            </div>
+          )}
 
           {/* Banner — explains why some options are locked */}
           <div className="mb-6 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-5 py-4 lg:px-6 lg:py-5 flex items-start gap-4">
@@ -376,6 +405,7 @@ export default function CheckoutPage() {
                     1–2 години після оформлення.
                   </p>
                 </div>
+
               </FormGroup>
 
               {/* Group 3: Payment */}

@@ -63,6 +63,11 @@ export interface Order {
   /** Staff-only note — never shown to the customer. */
   internalNote: string | null;
   trackingNumber: string | null;
+  /** Per-order shared secret. Concatenated into the customer-facing
+   *  URL (`/order/BAT-1234?token=…`) so guests can come back to their
+   *  receipt without an account. Owners + admins reach the same data
+   *  via RLS — token is only required for guests. */
+  viewToken: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +110,7 @@ interface OrderRow {
   comment: string | null;
   internal_note: string | null;
   tracking_number: string | null;
+  view_token: string;
   created_at: string;
   updated_at: string;
 }
@@ -155,6 +161,7 @@ function rowToOrder(row: OrderRow): Order {
     comment: row.comment,
     internalNote: row.internal_note,
     trackingNumber: row.tracking_number,
+    viewToken: row.view_token,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -235,7 +242,7 @@ export interface CreateOrderInput {
  *  paid-checkout we'll move this server-side anyway. */
 export async function createOrder(
   input: CreateOrderInput,
-): Promise<{ id: string; number: string }> {
+): Promise<{ id: string; number: string; viewToken: string }> {
   const subtotal = input.items.reduce(
     (sum, i) => sum + i.unitPrice * i.quantity,
     0,
@@ -263,7 +270,7 @@ export async function createOrder(
       recipient_email: input.recipientEmail,
       comment: input.comment,
     })
-    .select("id, number")
+    .select("id, number, view_token")
     .single();
   if (orderErr || !order) {
     throw orderErr ?? new Error("Failed to create order");
@@ -288,32 +295,63 @@ export async function createOrder(
     .insert(itemsPayload);
   if (itemsErr) throw itemsErr;
 
-  return { id: order.id, number: order.number as string };
+  return {
+    id: order.id,
+    number: order.number as string,
+    viewToken: order.view_token as string,
+  };
 }
 
-/** Look up an order by its public BAT-NNNN number (returns null if RLS
- *  hides it — wrong user, doesn't exist, etc). */
-export async function getOrderByNumber(
+/** Customer-facing order lookup by BAT-NNNN number.
+ *
+ *  Works for three audiences via a single SECURITY DEFINER RPC:
+ *    - logged-in owner (user_id = auth.uid())
+ *    - admin (is_current_user_admin())
+ *    - guest with the right `token` from the URL
+ *
+ *  Returns null if none of those conditions match — same shape as the
+ *  RLS-narrowed path, so callers don't need to know about the hosting
+ *  detail.
+ */
+export async function getOrderForView(
   number: string,
+  token: string | null,
 ): Promise<OrderWithItems | null> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
-    .from("orders")
-    .select("*")
-    .eq("number", number)
+    .rpc("get_order_for_view", {
+      p_number: number,
+      p_token: token,
+    })
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const { data: items, error: itemsErr } = await supabase
-    .from("order_items")
-    .select("*")
-    .eq("order_id", (data as OrderRow).id)
-    .order("created_at", { ascending: true });
+  const orderRow = data as OrderRow;
+
+  const { data: items, error: itemsErr } = await supabase.rpc(
+    "get_order_items_for_view",
+    { p_order_id: orderRow.id, p_token: token },
+  );
   if (itemsErr) throw itemsErr;
   return {
-    ...rowToOrder(data as OrderRow),
+    ...rowToOrder(orderRow),
     items: (items as OrderItemRow[]).map(rowToItem),
   };
+}
+
+/** Status timeline for the customer-facing detail page. Same audience
+ *  rules as `getOrderForView`. */
+export async function listOrderEventsForView(
+  orderId: string,
+  token: string | null,
+): Promise<OrderStatusEvent[]> {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("get_order_events_for_view", {
+    p_order_id: orderId,
+    p_token: token,
+  });
+  if (error) throw error;
+  return (data as OrderStatusEventRow[]).map(rowToStatusEvent);
 }
 
 // ---------------------------------------------------------------------------

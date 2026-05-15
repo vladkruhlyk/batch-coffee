@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -17,8 +17,8 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import {
   deliveryMethodLabel,
-  getOrderByNumber,
-  listOrderStatusEvents,
+  getOrderForView,
+  listOrderEventsForView,
   paymentMethodLabel,
   statusLabel,
   statusTone,
@@ -43,8 +43,20 @@ import { cn, formatPrice } from "@/lib/utils";
  * detail page.
  */
 export default function OrderDetailPage() {
+  // useSearchParams is CSR-only; wrap so the static prerender pass
+  // doesn't complain about it being called outside of <Suspense>.
+  return (
+    <Suspense fallback={null}>
+      <OrderDetailInner />
+    </Suspense>
+  );
+}
+
+function OrderDetailInner() {
   const params = useParams<{ number: string }>();
+  const searchParams = useSearchParams();
   const number = params.number;
+  const token = searchParams.get("token");
 
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
@@ -57,12 +69,12 @@ export default function OrderDetailPage() {
   useEffect(() => {
     if (!hydrated || !number) return;
     let cancelled = false;
-    getOrderByNumber(number)
+    getOrderForView(number, token)
       .then(async (data) => {
         if (cancelled) return;
         setOrder(data);
         if (data) {
-          const evs = await listOrderStatusEvents(data.id);
+          const evs = await listOrderEventsForView(data.id, token);
           if (!cancelled) setEvents(evs);
         }
       })
@@ -79,7 +91,7 @@ export default function OrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [number, hydrated]);
+  }, [number, token, hydrated]);
 
   return (
     <>
@@ -90,12 +102,15 @@ export default function OrderDetailPage() {
             <div className="grid place-items-center py-20 text-[var(--color-text-muted)]">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
-          ) : !user ? (
-            <NeedsLogin number={number} />
-          ) : !order ? (
-            <NotFound error={error} />
-          ) : (
+          ) : order ? (
             <Body order={order} events={events} />
+          ) : !user ? (
+            // Anonymous and the RPC didn't find the order (wrong / no
+            // token, or the URL belongs to an account-bound order).
+            // Offer login as a way out — they may own it once signed in.
+            <NeedsLogin number={number} />
+          ) : (
+            <NotFound error={error} />
           )}
         </Container>
       </main>

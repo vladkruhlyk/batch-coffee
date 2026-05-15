@@ -415,10 +415,10 @@ export function adaptSiteSettings(
     description:
       s?.description ??
       "Свіжообсмажена спешиалті кава. Підписка, доставка по Україні.",
-    contactPhone: s?.contactPhone ?? "+380 50 123 45 67",
+    contactPhone: s?.contactPhone ?? "+380 99 07 00 041",
     contactEmail: s?.contactEmail ?? "hello@batch.coffee",
-    address: s?.address ?? "Велика Васильківська, 24, Київ",
-    hours: s?.hours ?? "Пн–Нд · 08:00–22:00",
+    address: s?.address ?? "Полтава, вул. Соборності, 27",
+    hours: s?.hours ?? "Пн–Нд · 08:00–20:00",
     instagram: s?.instagram,
     telegram: s?.telegram,
     facebook: s?.facebook,

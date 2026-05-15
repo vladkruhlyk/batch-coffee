@@ -35,7 +35,10 @@ const ACCOUNT_LINKS = [
 // Editing here is a one-line code change; not editor-friendly but
 // stable. CMS-driven footer comes back with the provider refactor.
 const SOCIAL_LINKS = [
-  { label: "Instagram", href: "https://instagram.com/batch.coffee" },
+  {
+    label: "Instagram",
+    href: "https://www.instagram.com/batch.coffee.roasters/",
+  },
   { label: "Telegram", href: "https://t.me/batchcoffee" },
 ];
 

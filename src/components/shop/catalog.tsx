@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 import {
+  CATEGORIES,
   getStartingPrice,
   type CategoryKey,
   type Product,
@@ -205,6 +206,55 @@ export function ShopCatalog({
           >
             Порівняти кави →
           </Link>
+        </div>
+      </div>
+
+      {/* Mobile-only category chip row — horizontal scroll, mirrors
+          the desktop sidebar's category checkboxes but in a one-line
+          format that's faster on a phone. Each pill toggles the
+          corresponding category in the same `filters.categories`
+          state so behaviour stays consistent across breakpoints. */}
+      <div className="lg:hidden -mx-6 mb-6 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 px-6 w-max">
+          <button
+            type="button"
+            onClick={() =>
+              setFilters((f) => ({ ...f, categories: [] }))
+            }
+            className={cn(
+              "shrink-0 inline-flex items-center rounded-full px-4 py-2 text-sm whitespace-nowrap transition-colors",
+              filters.categories.length === 0
+                ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
+                : "border border-[var(--color-border-strong)] text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)]",
+            )}
+          >
+            Усі
+          </button>
+          {CATEGORIES.map((cat) => {
+            const active = filters.categories.includes(cat.key);
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => {
+                  setFilters((f) => ({
+                    ...f,
+                    categories: active
+                      ? f.categories.filter((k) => k !== cat.key)
+                      : [...f.categories, cat.key],
+                  }));
+                }}
+                className={cn(
+                  "shrink-0 inline-flex items-center rounded-full px-4 py-2 text-sm whitespace-nowrap transition-colors",
+                  active
+                    ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
+                    : "border border-[var(--color-border-strong)] text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)]",
+                )}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

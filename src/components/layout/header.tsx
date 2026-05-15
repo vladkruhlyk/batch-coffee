@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 
 const NAV_LINKS = [
-  { label: "Каталог", href: "/shop" },
+  { label: "Наша кава", href: "/shop" },
   { label: "Підписка", href: "/subscription" },
   { label: "Brew Guide", href: "/brew-guide" },
   { label: "Journal", href: "/journal" },

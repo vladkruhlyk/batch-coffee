@@ -387,6 +387,29 @@ export async function listOrders(opts?: {
   return (data as OrderRow[]).map(rowToOrder);
 }
 
+/** Admin-only — fetch orders + their line items in one go for the
+ *  dashboard. Uses Supabase's nested FK select so we don't need to
+ *  hit the items table twice. RLS narrows to admin-visible rows. */
+export async function listOrdersWithItemsSince(
+  isoSince: string | null,
+): Promise<OrderWithItems[]> {
+  const supabase = createSupabaseBrowserClient();
+  let q = supabase
+    .from("orders")
+    .select("*, order_items(*)")
+    .order("created_at", { ascending: false });
+  if (isoSince) {
+    q = q.gte("created_at", isoSince);
+  }
+  const { data, error } = await q.limit(2000);
+  if (error) throw error;
+  type RowWithItems = OrderRow & { order_items: OrderItemRow[] };
+  return (data as RowWithItems[]).map((row) => ({
+    ...rowToOrder(row),
+    items: (row.order_items ?? []).map(rowToItem),
+  }));
+}
+
 /** List orders owned by a specific user — admin-only path used by the
  *  customer detail page. Regular users hit the unfiltered `listOrders`
  *  and RLS does the narrowing for them. */

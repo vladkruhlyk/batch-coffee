@@ -12,7 +12,8 @@ import {
   useCart,
   getCartSubtotal,
   getCartCount,
-  type CartItem,
+  getEffectiveItems,
+  type EffectiveCartItem,
 } from "@/lib/cart-store";
 import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
@@ -41,6 +42,8 @@ export default function CartPage() {
   const [promoError, setPromoError] = useState<string | null>(null);
 
   const subtotal = getCartSubtotal(items);
+  const effectiveItems = getEffectiveItems(items);
+  const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   const count = getCartCount(items);
   const discount = promoApplied === "BATCH10" ? Math.round(subtotal * 0.1) : 0;
   const eligibleForFreeShipping = subtotal - discount >= FREE_SHIPPING_THRESHOLD;
@@ -110,9 +113,15 @@ export default function CartPage() {
                   className="mb-5"
                 />
 
+                {wholesaleActive && (
+                  <p className="mb-3 inline-flex items-center gap-2 self-start rounded-full bg-emerald-100 px-3 py-1 text-[10px] tracking-[0.18em] uppercase text-emerald-800">
+                    Гуртова ціна активна
+                  </p>
+                )}
+
                 <ul className="flex flex-col gap-3">
                   <AnimatePresence initial={false}>
-                    {items.map((item) => (
+                    {effectiveItems.map((item) => (
                       <motion.li
                         key={item.id}
                         layout
@@ -273,7 +282,7 @@ function CartLine({
   onQty,
   onRemove,
 }: {
-  item: CartItem;
+  item: EffectiveCartItem;
   onQty: (n: number) => void;
   onRemove: () => void;
 }) {
@@ -298,8 +307,20 @@ function CartLine({
           {item.roast ? ` · ${item.roast}` : ""}
           {item.grind ? ` · ${item.grind}` : ""}
         </p>
-        <p className="mt-2 text-sm text-[var(--color-text-secondary)] tabular-nums">
-          {formatPrice(item.unitPrice)} / шт
+        <p className="mt-2 text-sm text-[var(--color-text-secondary)] tabular-nums flex items-center gap-2">
+          {item.wholesaleActive && (
+            <span className="text-[var(--color-text-muted)] line-through">
+              {formatPrice(item.unitPrice)}
+            </span>
+          )}
+          <span
+            className={cn(
+              item.wholesaleActive &&
+                "text-[var(--color-text-primary)] font-medium",
+            )}
+          >
+            {formatPrice(item.effectiveUnitPrice)} / шт
+          </span>
         </p>
       </div>
 
@@ -328,9 +349,16 @@ function CartLine({
       </div>
 
       {/* Line total — hidden on small mobile to keep row compact */}
-      <p className="hidden sm:block font-display text-base lg:text-lg font-semibold tabular-nums shrink-0 min-w-[5ch] text-right">
-        {formatPrice(item.unitPrice * item.quantity)}
-      </p>
+      <div className="hidden sm:block text-right shrink-0 min-w-[5ch]">
+        {item.wholesaleActive && (
+          <p className="text-[11px] text-[var(--color-text-muted)] line-through tabular-nums">
+            {formatPrice(item.unitPrice * item.quantity)}
+          </p>
+        )}
+        <p className="font-display text-base lg:text-lg font-semibold tabular-nums">
+          {formatPrice(item.effectiveUnitPrice * item.quantity)}
+        </p>
+      </div>
 
       <button
         type="button"

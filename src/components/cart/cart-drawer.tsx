@@ -11,8 +11,9 @@ import { EASING } from "@/lib/easing";
 import { formatPrice, cn } from "@/lib/utils";
 import {
   getCartSubtotal,
+  getEffectiveItems,
   useCart,
-  type CartItem,
+  type EffectiveCartItem,
 } from "@/lib/cart-store";
 
 /**
@@ -76,6 +77,7 @@ export function CartDrawer() {
   }, [pathname, open, closeCart]);
 
   const subtotal = getCartSubtotal(items);
+  const effectiveItems = getEffectiveItems(items);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
   const isEmpty = items.length === 0;
 
@@ -133,7 +135,7 @@ export function CartDrawer() {
             ) : (
               <ul className="flex-1 overflow-y-auto px-6 py-4 lg:px-8">
                 <AnimatePresence initial={false}>
-                  {items.map((item) => (
+                  {effectiveItems.map((item) => (
                     <motion.li
                       key={item.id}
                       layout
@@ -214,13 +216,14 @@ export function CartDrawer() {
 /* ------------------------------------------------------------------ */
 
 interface CartLineProps {
-  item: CartItem;
+  item: EffectiveCartItem;
   onRemove: () => void;
   onQuantity: (n: number) => void;
 }
 
 function CartLine({ item, onRemove, onQuantity }: CartLineProps) {
-  const lineTotal = item.unitPrice * item.quantity;
+  const retailLineTotal = item.unitPrice * item.quantity;
+  const lineTotal = item.effectiveUnitPrice * item.quantity;
   const variantBits = [item.weightLabel, item.roast, item.grind].filter(
     (b): b is string => Boolean(b && b !== "Не молоти"),
   );
@@ -268,9 +271,16 @@ function CartLine({ item, onRemove, onQuantity }: CartLineProps) {
             value={item.quantity}
             onChange={onQuantity}
           />
-          <span className="font-display text-sm font-semibold tabular-nums">
-            {formatPrice(lineTotal)}
-          </span>
+          <div className="text-right">
+            {item.wholesaleActive && (
+              <p className="text-[10px] text-[var(--color-text-muted)] line-through tabular-nums">
+                {formatPrice(retailLineTotal)}
+              </p>
+            )}
+            <span className="font-display text-sm font-semibold tabular-nums">
+              {formatPrice(lineTotal)}
+            </span>
+          </div>
         </div>
       </div>
     </div>

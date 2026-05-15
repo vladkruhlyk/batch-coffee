@@ -7,7 +7,7 @@ import { ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
-import { useCart, getCartSubtotal } from "@/lib/cart-store";
+import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
 import { createOrder } from "@/lib/orders";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
@@ -116,7 +116,13 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // Apply wholesale once and reuse throughout the page — summary lines,
+  // subtotal, and the order payload all need to agree on the same set
+  // of per-line prices. `getCartSubtotal` re-applies wholesale itself
+  // but reading from `effectiveItems` directly keeps the wire shorter.
+  const effectiveItems = getEffectiveItems(items);
   const subtotal = getCartSubtotal(items);
+  const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   // Pickup is free; that's the only delivery method available right now.
   const deliveryFee = 0;
   const total = subtotal + deliveryFee;
@@ -148,7 +154,7 @@ export default function CheckoutPage() {
         paymentMethod: "cod",
         comment: comment.trim() || null,
         deliveryFee,
-        items: items.map((it) => ({
+        items: effectiveItems.map((it) => ({
           productSlug: it.slug,
           productName: it.name,
           thumb: it.thumb,
@@ -156,7 +162,9 @@ export default function CheckoutPage() {
           weightGrams: it.weightGrams,
           roast: it.roast ?? null,
           grind: it.grind ?? null,
-          unitPrice: it.unitPrice,
+          // Pay the wholesale-aware price, not the cart snapshot. If
+          // wholesale never kicked in this is identical to unitPrice.
+          unitPrice: it.effectiveUnitPrice,
           quantity: it.quantity,
         })),
       });
@@ -441,11 +449,8 @@ export default function CheckoutPage() {
                 </h2>
 
                 <ul className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
-                  {items.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center gap-3"
-                    >
+                  {effectiveItems.map((item) => (
+                    <li key={item.id} className="flex items-center gap-3">
                       <span
                         aria-hidden
                         className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)]"
@@ -459,12 +464,25 @@ export default function CheckoutPage() {
                           {item.weightLabel} · {item.quantity} шт
                         </p>
                       </div>
-                      <p className="text-sm font-display font-semibold tabular-nums">
-                        {formatPrice(item.unitPrice * item.quantity)}
-                      </p>
+                      <div className="text-right">
+                        {item.wholesaleActive && (
+                          <p className="text-[10px] text-[var(--color-text-muted)] line-through tabular-nums">
+                            {formatPrice(item.unitPrice * item.quantity)}
+                          </p>
+                        )}
+                        <p className="text-sm font-display font-semibold tabular-nums">
+                          {formatPrice(item.effectiveUnitPrice * item.quantity)}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
+
+                {wholesaleActive && (
+                  <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-[10px] tracking-[0.18em] uppercase text-emerald-800">
+                    Гуртова ціна
+                  </p>
+                )}
 
                 <dl className="mt-5 pt-5 border-t border-[var(--color-border-default)] flex flex-col gap-2 text-sm">
                   <div className="flex justify-between">

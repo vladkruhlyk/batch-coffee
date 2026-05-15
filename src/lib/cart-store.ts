@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/data/products";
+import { getWholesalePerKg, WHOLESALE_MIN_KG } from "./wholesale";
 
 /**
  * Cart store — Zustand + localStorage persistence.
@@ -8,6 +9,12 @@ import type { Product } from "@/data/products";
  * Each line item has a stable `id` derived from slug + variant combination
  * (weight / roast / grind), so adding the "same" product with a different
  * weight creates a new line rather than incrementing the existing one.
+ *
+ * Wholesale pricing: when the total weight of a single SKU reaches 3 kg
+ * across all of its lines, every line of that SKU drops to the wholesale
+ * per-kg rate. We snapshot the per-kg rate on each item at add-time, then
+ * compute the "effective" price for display + submit via getEffectiveItems.
+ * Cart-store stores the retail snapshot; UI + checkout call the helper.
  */
 
 export interface CartItem {
@@ -19,10 +26,26 @@ export interface CartItem {
   thumb: string;
   weightLabel: string;
   weightGrams: number;
+  /** Retail per-line snapshot from Sanity at add-time. Always paid as-is
+   *  unless wholesale kicks in for the whole SKU — then `getEffectiveItems`
+   *  overrides this. */
   unitPrice: number;
+  /** Wholesale per-kg rate snapshot, or null if the SKU has no 1 kg
+   *  variant (drips, gear, etc — those never qualify for wholesale).
+   *  Optional for back-compat with carts persisted before this field
+   *  existed; treated like null when absent. */
+  wholesalePerKg?: number | null;
   roast?: string;
   grind?: string;
   quantity: number;
+}
+
+/** Cart line enriched with the price the customer actually pays. */
+export interface EffectiveCartItem extends CartItem {
+  /** Per-unit price after applying the wholesale rule across the SKU. */
+  effectiveUnitPrice: number;
+  /** True iff the wholesale per-kg rate is in force for this SKU. */
+  wholesaleActive: boolean;
 }
 
 export interface AddToCartInput {
@@ -88,6 +111,7 @@ export const useCart = create<CartState>()(
             weightLabel: weight.label,
             weightGrams: weight.grams,
             unitPrice: weight.price,
+            wholesalePerKg: getWholesalePerKg(product),
             roast,
             grind,
             quantity,
@@ -127,9 +151,40 @@ export const useCart = create<CartState>()(
   ),
 );
 
-/** Derived subtotal — sum of line totals. */
+/**
+ * Apply wholesale across the cart. For each product slug, sum total kg
+ * across its lines; if that total hits WHOLESALE_MIN_KG and the SKU
+ * has a per-kg wholesale rate, drop every line of that SKU to the
+ * wholesale rate (computed as `wholesalePerKg × weightGrams / 1000`,
+ * rounded). Lines from SKUs that don't qualify keep their retail
+ * unitPrice unchanged.
+ */
+export function getEffectiveItems(items: CartItem[]): EffectiveCartItem[] {
+  const totalGrams = new Map<string, number>();
+  for (const i of items) {
+    totalGrams.set(
+      i.slug,
+      (totalGrams.get(i.slug) ?? 0) + i.weightGrams * i.quantity,
+    );
+  }
+  const minGrams = WHOLESALE_MIN_KG * 1000;
+  return items.map((i) => {
+    const slugTotal = totalGrams.get(i.slug) ?? 0;
+    const wholesaleActive =
+      i.wholesalePerKg != null && slugTotal >= minGrams;
+    const effectiveUnitPrice = wholesaleActive
+      ? Math.round(i.wholesalePerKg! * (i.weightGrams / 1000))
+      : i.unitPrice;
+    return { ...i, effectiveUnitPrice, wholesaleActive };
+  });
+}
+
+/** Derived subtotal — sum of effective line totals (wholesale-aware). */
 export function getCartSubtotal(items: CartItem[]): number {
-  return items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+  return getEffectiveItems(items).reduce(
+    (sum, i) => sum + i.effectiveUnitPrice * i.quantity,
+    0,
+  );
 }
 
 /** Total unit count (sum of quantities) — for the header badge. */

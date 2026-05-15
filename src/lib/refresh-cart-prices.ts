@@ -1,5 +1,6 @@
 import { client as sanityClient } from "@/sanity/lib/client";
 import type { CartItem } from "./cart-store";
+import { WHOLESALE_DISCOUNT_PERCENT } from "./wholesale";
 
 /**
  * Re-fetch live Sanity prices for each line in the cart and return the
@@ -65,28 +66,47 @@ export async function refreshCartPrices(
     { slugs },
   );
 
-  // slug → weightLabel → currentPrice
-  const lookup = new Map<string, Map<string, number>>();
+  // slug → weightLabel → currentPrice; plus wholesale per-kg (derived
+  // from the 1kg variant if any).
+  const priceLookup = new Map<string, Map<string, number>>();
+  const wholesaleLookup = new Map<string, number | null>();
   for (const row of rows) {
     const weights = new Map<string, number>();
+    let wholesalePerKg: number | null = null;
     for (const w of row.weights ?? []) {
       weights.set(w.label, w.price);
+      if (w.grams === 1000) {
+        wholesalePerKg = Math.round(
+          w.price * (1 - WHOLESALE_DISCOUNT_PERCENT / 100),
+        );
+      }
     }
-    lookup.set(row.slug, weights);
+    priceLookup.set(row.slug, weights);
+    wholesaleLookup.set(row.slug, wholesalePerKg);
   }
 
   const changed: PriceRefreshResult["changed"] = [];
   const updatedItems = items.map((item) => {
-    const live = lookup.get(item.slug)?.get(item.weightLabel);
-    if (live == null || live === item.unitPrice) return item;
-    changed.push({
-      id: item.id,
-      name: item.name,
-      weightLabel: item.weightLabel,
-      oldPrice: item.unitPrice,
-      newPrice: live,
-    });
-    return { ...item, unitPrice: live };
+    const livePrice = priceLookup.get(item.slug)?.get(item.weightLabel);
+    const liveWholesale = wholesaleLookup.get(item.slug) ?? null;
+    const priceChanged = livePrice != null && livePrice !== item.unitPrice;
+    const wholesaleChanged =
+      liveWholesale !== (item.wholesalePerKg ?? null);
+    if (!priceChanged && !wholesaleChanged) return item;
+    if (priceChanged) {
+      changed.push({
+        id: item.id,
+        name: item.name,
+        weightLabel: item.weightLabel,
+        oldPrice: item.unitPrice,
+        newPrice: livePrice!,
+      });
+    }
+    return {
+      ...item,
+      unitPrice: livePrice ?? item.unitPrice,
+      wholesalePerKg: liveWholesale,
+    };
   });
 
   return { updatedItems, changed };

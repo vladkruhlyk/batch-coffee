@@ -90,10 +90,16 @@ export function HomeSubscription() {
             </div>
 
             <Reveal delay={0.5}>
-              <div className="mt-10">
-                <Button href="/subscription/setup" variant="primary" size="lg">
+              {/* CTA disabled — full subscription flow is gated until
+                  LiqPay recurring + cron job are wired. Re-enable by
+                  swapping the button back to `<Button href="/subscription/setup">`. */}
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <Button variant="primary" size="lg" disabled>
                   Оформити підписку →
                 </Button>
+                <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-[11px] tracking-[0.2em] uppercase text-amber-900">
+                  Скоро
+                </span>
               </div>
             </Reveal>
           </div>

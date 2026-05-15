@@ -38,8 +38,12 @@ export default function AccountPage() {
               <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] inline-flex items-center gap-2">
                 <Repeat className="h-3.5 w-3.5" /> Підписка
               </span>
-              <span className="inline-flex items-center text-[10px] tracking-[0.25em] uppercase rounded-full px-2.5 py-1 bg-emerald-100 text-emerald-800">
-                Активна
+              {/* Was "Активна" green pill while subscription was mocked
+                  as live. Until the recurring flow ships, the card shows
+                  a "Скоро" placeholder so we don't tell every user they
+                  have an active sub when they don't. */}
+              <span className="inline-flex items-center text-[10px] tracking-[0.25em] uppercase rounded-full px-2.5 py-1 bg-amber-100 text-amber-800">
+                Скоро
               </span>
             </div>
             <div className="flex items-center gap-4">
@@ -71,12 +75,13 @@ export default function AccountPage() {
                 </span>
               </span>
             </p>
-            <Link
-              href="/account/subscriptions"
-              className="mt-6 self-start inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase border-b border-[var(--color-text-primary)] pb-1 hover:opacity-60 transition-opacity"
-            >
-              Керувати <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+            {/* "Керувати" was a deep link into /account/subscriptions
+                management. Replaced by a non-interactive label so the
+                user can't get into the management UI before subscriptions
+                actually run. Put the Link back once subscriptions ship. */}
+            <span className="mt-6 self-start inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] pb-1 border-b border-dashed border-[var(--color-border-default)]">
+              Керування — скоро
+            </span>
           </article>
         )}
 

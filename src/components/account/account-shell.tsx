@@ -36,16 +36,6 @@ const NAV = [
     href: "/account/subscriptions",
     icon: Repeat,
   },
-  // «Адреси» tab is intentionally hidden until NP delivery is wired up.
-  // The page + Supabase table are still in the codebase — pickup-only
-  // checkout doesn't pre-fill from saved addresses yet, so a customer
-  // saving an address has nowhere to use it. Put this back once the
-  // checkout form starts reading from /lib/addresses.
-  // {
-  //   label: "Адреси",
-  //   href: "/account/addresses",
-  //   icon: MapPin,
-  // },
   {
     label: "Профіль",
     href: "/account/profile",

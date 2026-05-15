@@ -107,13 +107,16 @@ export function Header({ overlay = false }: HeaderProps) {
               ))}
             </nav>
 
-            {/* Icons */}
+            {/* Icons. The user-icon was previously `hidden md:block` —
+                that meant phone visitors had no way into /account from
+                the header at all. Now it shows everywhere; on the
+                narrowest viewports it sits next to the cart. */}
             <div className="flex items-center gap-3">
               <SearchButton />
               <Link
                 href="/account"
                 aria-label="Особистий кабінет"
-                className="p-2 hover:opacity-60 transition-opacity duration-300 hidden md:block"
+                className="p-2 hover:opacity-60 transition-opacity duration-300"
               >
                 <User className="w-5 h-5" strokeWidth={1.5} />
               </Link>
@@ -183,6 +186,30 @@ export function Header({ overlay = false }: HeaderProps) {
                   </Link>
                 </motion.div>
               ))}
+
+              {/* Account link — separated from the main nav with a
+                  divider so it reads as a secondary action. Picked
+                  smaller copy than the main NAV_LINKS to set the
+                  hierarchy: marketing pages first, then "your stuff". */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.5,
+                  delay: 0.1 + NAV_LINKS.length * 0.06,
+                  ease: EASING.smooth,
+                }}
+                className="mt-10 pt-6 border-t border-[var(--color-border-default)]"
+              >
+                <Link
+                  href="/account"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center gap-3 text-xl font-display py-2 hover:opacity-60 transition-opacity"
+                >
+                  <User className="w-5 h-5" strokeWidth={1.5} />
+                  Особистий кабінет
+                </Link>
+              </motion.div>
             </nav>
           </Container>
         </motion.div>

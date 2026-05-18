@@ -54,9 +54,17 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [comment, setComment] = useState("");
+  const [payment, setPayment] = useState<"card" | "cod">("cod");
   const [agreed, setAgreed] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Holds the auto-submit form payload returned by /api/wayforpay/start.
+  // When set, an effect mounts a hidden form and submits it, redirecting
+  // the browser to WayForPay's hosted page.
+  const [wfpPayload, setWfpPayload] = useState<{
+    action: string;
+    fields: Record<string, string>;
+  } | null>(null);
 
   // Pre-fill the form when the auth-store hydrates with a real user.
   // Legitimate cross-store sync — deps deliberately omitted, the fill
@@ -138,7 +146,7 @@ export default function CheckoutPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const { number, viewToken } = await createOrder({
+      const { id, number, viewToken } = await createOrder({
         // Logged in → tie the order to the profile so it shows up
         // in /account/orders. Guest → null, the order is only
         // reachable via the /order/[number] URL.
@@ -149,8 +157,8 @@ export default function CheckoutPage() {
         recipientEmail: email.trim() || user?.email || null,
         deliveryMethod: "pickup",
         deliveryAddress: PICKUP_ADDRESS.line1,
-        deliveryCity: "Київ",
-        paymentMethod: "cod",
+        deliveryCity: "Полтава",
+        paymentMethod: payment,
         comment: comment.trim() || null,
         deliveryFee,
         items: effectiveItems.map((it) => ({
@@ -168,10 +176,34 @@ export default function CheckoutPage() {
         })),
       });
       clearCart();
-      // Always include the view token. Logged-in customers don't need
-      // it (RLS would let them in anyway) but having it in the URL
-      // lets them share the link with a guest viewer, and matches how
-      // guests reach the same page.
+      if (payment === "card") {
+        // Online card → kick off WayForPay. Backend builds the signed
+        // form payload; we render it in a hidden <form> and auto-
+        // submit, which redirects the browser to WayForPay's hosted
+        // page. They handle the rest (3DS, etc) and POST the result
+        // to /api/wayforpay/webhook in the background.
+        const res = await fetch("/api/wayforpay/start", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ orderId: id, viewToken }),
+        });
+        if (!res.ok) {
+          const detail = await res
+            .json()
+            .then((j) => j.error)
+            .catch(() => res.statusText);
+          throw new Error(`Помилка оплати: ${detail}`);
+        }
+        const payload = (await res.json()) as {
+          action: string;
+          fields: Record<string, string>;
+        };
+        setWfpPayload(payload);
+        // submitting stays true so the button keeps its spinner while
+        // the hidden form auto-submits.
+        return;
+      }
+      // COD path — straight to confirmation page.
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
       // Surface the underlying error rather than a generic line — saves
@@ -418,22 +450,27 @@ export default function CheckoutPage() {
                   <PaymentOption
                     label="При отриманні"
                     sub="Готівка або термінал у кав'ярні"
-                    active
+                    active={payment === "cod"}
                     available
-                    onClick={() => {
-                      /* only option right now */
-                    }}
+                    onClick={() => setPayment("cod")}
                   />
                   <PaymentOption
                     label="Картка онлайн"
-                    sub="Скоро · LiqPay · Apple/Google Pay"
-                    active={false}
-                    available={false}
-                    onClick={() => {
-                      /* disabled */
-                    }}
+                    sub="WayForPay · Apple/Google Pay"
+                    active={payment === "card"}
+                    available
+                    onClick={() => setPayment("card")}
                   />
                 </div>
+                {payment === "card" && (
+                  <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--radius-md)] px-3 py-2">
+                    Тестовий режим WayForPay. Картка для тесту:{" "}
+                    <span className="font-mono">4444 5551 1111 6666</span>,{" "}
+                    <span className="font-mono">12/25</span>, CVV{" "}
+                    <span className="font-mono">123</span>. Реальні гроші не
+                    списуються.
+                  </p>
+                )}
               </FormGroup>
 
               {/* Group 4: Comment */}
@@ -557,6 +594,11 @@ export default function CheckoutPage() {
                 >
                   {submitting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : payment === "card" ? (
+                    <>
+                      Оплатити карткою
+                      <ArrowRight className="h-4 w-4" />
+                    </>
                   ) : (
                     <>
                       Підтвердити замовлення
@@ -564,6 +606,16 @@ export default function CheckoutPage() {
                     </>
                   )}
                 </button>
+
+                {/* Auto-submitting hidden form — appears only after
+                    /api/wayforpay/start returns the signed payload.
+                    The useEffect below calls .submit() on the next tick. */}
+                {wfpPayload && (
+                  <WayForPayAutoForm
+                    action={wfpPayload.action}
+                    fields={wfpPayload.fields}
+                  />
+                )}
 
                 <p className="mt-5 inline-flex items-center gap-2 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
                   <ShieldCheck className="h-3.5 w-3.5" />
@@ -754,5 +806,38 @@ function PaymentOption({
         {sub}
       </p>
     </button>
+  );
+}
+
+/**
+ * Tiny invisible component that renders a <form> with the WayForPay
+ * payload as hidden inputs and submits it on next tick. The form
+ * action takes the customer's browser straight to WayForPay's hosted
+ * page (which understands form-urlencoded POST).
+ */
+function WayForPayAutoForm({
+  action,
+  fields,
+}: {
+  action: string;
+  fields: Record<string, string>;
+}) {
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    formRef.current?.submit();
+  }, []);
+  return (
+    <form
+      ref={formRef}
+      action={action}
+      method="POST"
+      acceptCharset="utf-8"
+      className="hidden"
+      aria-hidden
+    >
+      {Object.entries(fields).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
+    </form>
   );
 }

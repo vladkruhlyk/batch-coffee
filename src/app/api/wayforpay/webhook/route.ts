@@ -15,33 +15,46 @@ import { handleWayForPayCallback } from "@/lib/wayforpay/webhook";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const contentType = req.headers.get("content-type") || "";
-
+  // WayForPay quirk: they POST the JSON body with Content-Type set to
+  // `text/plain`, not `application/json`. We can't rely on the header,
+  // so we read the body as raw text and try JSON first (which is what
+  // they actually send), falling back to form-urlencoded for the rare
+  // alternate integration mode. Logging the raw body on signature
+  // failure makes the next debugging round-trip much shorter.
+  let raw = "";
   let body: Record<string, unknown> = {};
   try {
-    if (contentType.includes("application/json")) {
-      body = (await req.json()) as Record<string, unknown>;
+    raw = await req.text();
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      body = JSON.parse(trimmed) as Record<string, unknown>;
     } else {
-      // form-urlencoded — values come through as strings.
-      const text = await req.text();
-      const params = new URLSearchParams(text);
+      const params = new URLSearchParams(trimmed);
       body = Object.fromEntries(params.entries());
     }
   } catch (e) {
+    console.error("wayforpay/webhook parse failed:", e, "raw:", raw);
     return NextResponse.json(
       { error: "could not parse body", detail: String(e) },
       { status: 400 },
     );
   }
 
-  // Coerce numeric fields — WayForPay sends them as strings in the
-  // form-urlencoded variant.
+  // Coerce numeric fields — WayForPay's form-urlencoded variant sends
+  // amount as a string; JSON usually sends it as a number, but be
+  // safe either way.
   if (typeof body.amount === "string") body.amount = Number(body.amount);
 
   const { ack, detail } = await handleWayForPayCallback(body);
   if (!ack) {
-    // Surface why we rejected — useful in WayForPay's webhook log
-    // when debugging.
+    console.error(
+      "wayforpay/webhook rejected:",
+      detail,
+      "body keys:",
+      Object.keys(body),
+      "raw:",
+      raw.slice(0, 500),
+    );
     return NextResponse.json({ error: detail }, { status: 400 });
   }
   return NextResponse.json(ack);

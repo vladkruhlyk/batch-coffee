@@ -17,9 +17,18 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+/** Shared handler — pull orderReference from query OR form body, look
+ *  up the order, redirect the browser to /order/[number]. WayForPay
+ *  sometimes uses POST (form-urlencoded) instead of GET for the
+ *  return URL, so we accept both. */
+async function handleReturn(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
-  const ref = url.searchParams.get("orderReference");
+  let ref = url.searchParams.get("orderReference");
+  if (!ref && req.method === "POST") {
+    const text = await req.text();
+    const params = new URLSearchParams(text);
+    ref = params.get("orderReference");
+  }
   if (!ref) {
     return NextResponse.redirect(new URL("/", req.url));
   }
@@ -45,5 +54,15 @@ export async function GET(req: NextRequest) {
 
   const target = new URL(`/order/${order.number}`, req.url);
   target.searchParams.set("token", order.view_token);
-  return NextResponse.redirect(target);
+  // Force GET on the redirect — even when WayForPay POSTs us with form
+  // data, the customer's browser should follow with a plain navigation.
+  return NextResponse.redirect(target, { status: 303 });
+}
+
+export async function GET(req: NextRequest) {
+  return handleReturn(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handleReturn(req);
 }

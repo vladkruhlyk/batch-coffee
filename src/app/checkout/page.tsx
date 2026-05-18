@@ -62,7 +62,7 @@ export default function CheckoutPage() {
   // the browser to WayForPay's hosted page.
   const [wfpPayload, setWfpPayload] = useState<{
     action: string;
-    fields: Record<string, string>;
+    fields: Array<{ name: string; value: string }>;
   } | null>(null);
 
   // Pre-fill the form when the auth-store hydrates with a real user.
@@ -211,7 +211,7 @@ export default function CheckoutPage() {
         }
         const payload = (await res.json()) as {
           action: string;
-          fields: Record<string, string>;
+          fields: Array<{ name: string; value: string }>;
         };
         setWfpPayload(payload);
         // submitting stays true so the button keeps its spinner while
@@ -623,16 +623,6 @@ export default function CheckoutPage() {
                   )}
                 </button>
 
-                {/* Auto-submitting hidden form — appears only after
-                    /api/wayforpay/start returns the signed payload.
-                    The useEffect below calls .submit() on the next tick. */}
-                {wfpPayload && (
-                  <WayForPayAutoForm
-                    action={wfpPayload.action}
-                    fields={wfpPayload.fields}
-                  />
-                )}
-
                 <p className="mt-5 inline-flex items-center gap-2 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Дані захищені · RLS на стороні бази
@@ -640,6 +630,15 @@ export default function CheckoutPage() {
               </div>
             </aside>
           </form>
+          {/* Keep WayForPay's auto-submit form outside the checkout
+              <form>. Nested forms are invalid HTML and can prevent the
+              browser from posting to the hosted payment page. */}
+          {wfpPayload && (
+            <WayForPayAutoForm
+              action={wfpPayload.action}
+              fields={wfpPayload.fields}
+            />
+          )}
         </Container>
       </main>
       <Footer />
@@ -857,11 +856,14 @@ function WayForPayAutoForm({
   fields,
 }: {
   action: string;
-  fields: Record<string, string>;
+  fields: Array<{ name: string; value: string }>;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   useEffect(() => {
-    formRef.current?.submit();
+    const id = window.setTimeout(() => {
+      formRef.current?.submit();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
   return (
     <form
@@ -872,8 +874,13 @@ function WayForPayAutoForm({
       className="hidden"
       aria-hidden
     >
-      {Object.entries(fields).map(([name, value]) => (
-        <input key={name} type="hidden" name={name} value={value} />
+      {fields.map(({ name, value }, index) => (
+        <input
+          key={`${name}-${index}`}
+          type="hidden"
+          name={name}
+          value={value}
+        />
       ))}
     </form>
   );

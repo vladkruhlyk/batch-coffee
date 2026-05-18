@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createSupabaseAdminClient } from "../supabase/server";
 import {
+  WAYFORPAY_PAY_URL,
   wayforpayMerchantAccount,
   wayforpayMerchantDomain,
   wayforpayMerchantSecret,
@@ -20,10 +21,13 @@ import type { OrderWithItems } from "../orders";
  */
 export async function buildWayForPayPayload(order: OrderWithItems): Promise<{
   action: string;
-  fields: Record<string, string>;
+  fields: Array<{ name: string; value: string }>;
 }> {
   const supabase = createSupabaseAdminClient();
-  const supaUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl?.startsWith("http")) {
+    throw new Error("NEXT_PUBLIC_SITE_URL must be an absolute public URL");
+  }
 
   // Fresh ref per attempt so WayForPay doesn't reject duplicates.
   const ref = `${order.number}-${randomBytes(4).toString("hex")}`;
@@ -61,41 +65,52 @@ export async function buildWayForPayPayload(order: OrderWithItems): Promise<{
     productPrice,
   });
 
-  // WayForPay hosted form accepts <form> with these fields.
-  const fields: Record<string, string> = {
-    merchantAccount: wayforpayMerchantAccount,
-    merchantDomainName: wayforpayMerchantDomain,
-    merchantSignature: signature,
-    orderReference: ref,
-    orderDate: orderDate.toString(),
-    amount: order.total.toString(),
-    currency: "UAH",
-    language: "UA",
-    returnUrl: `${supaUrl}/api/wayforpay/return?orderReference=${encodeURIComponent(
-      ref,
-    )}`,
-    serviceUrl: `${supaUrl}/api/wayforpay/webhook`,
-    // Optional contact info — speeds up 3DS / refund handling.
-    clientFirstName: order.recipientFirstName,
-    clientLastName: order.recipientLastName,
-    clientPhone: order.recipientPhone.replace(/\D/g, ""),
-    ...(order.recipientEmail ? { clientEmail: order.recipientEmail } : {}),
-  };
+  const fields: Array<{ name: string; value: string }> = [
+    { name: "merchantAccount", value: wayforpayMerchantAccount },
+    { name: "merchantAuthType", value: "SimpleSignature" },
+    { name: "merchantDomainName", value: wayforpayMerchantDomain },
+    { name: "merchantTransactionSecureType", value: "AUTO" },
+    { name: "merchantSignature", value: signature },
+    { name: "orderReference", value: ref },
+    { name: "orderDate", value: orderDate.toString() },
+    { name: "amount", value: order.total.toString() },
+    { name: "currency", value: "UAH" },
+    { name: "language", value: "UA" },
+    { name: "defaultPaymentSystem", value: "card" },
+    {
+      name: "returnUrl",
+      value: `${siteUrl}/api/wayforpay/return?orderReference=${encodeURIComponent(
+        ref,
+      )}`,
+    },
+    { name: "serviceUrl", value: `${siteUrl}/api/wayforpay/webhook` },
+    { name: "clientFirstName", value: order.recipientFirstName },
+    { name: "clientLastName", value: order.recipientLastName },
+    {
+      name: "clientPhone",
+      value: order.recipientPhone.replace(/\D/g, ""),
+    },
+  ];
 
-  // Arrays go in as productName[0], productName[1], ... — that's what
-  // WayForPay's form parser expects.
-  productName.forEach((name, i) => {
-    fields[`productName[${i}]`] = name;
+  if (order.recipientEmail) {
+    fields.push({ name: "clientEmail", value: order.recipientEmail });
+  }
+
+  // WayForPay's form examples use repeated `name[]` inputs. Keep this
+  // as an ordered array of pairs because a plain object cannot represent
+  // duplicate field names.
+  productName.forEach((name) => {
+    fields.push({ name: "productName[]", value: name });
   });
-  productCount.forEach((count, i) => {
-    fields[`productCount[${i}]`] = count.toString();
+  productPrice.forEach((price) => {
+    fields.push({ name: "productPrice[]", value: price.toString() });
   });
-  productPrice.forEach((price, i) => {
-    fields[`productPrice[${i}]`] = price.toString();
+  productCount.forEach((count) => {
+    fields.push({ name: "productCount[]", value: count.toString() });
   });
 
   return {
-    action: "https://secure.wayforpay.com/pay",
+    action: WAYFORPAY_PAY_URL,
     fields,
   };
 }

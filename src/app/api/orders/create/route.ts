@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseAdminClient,
+  createSupabaseServerClient,
+} from "@/lib/supabase/server";
 
 /**
  * POST /api/orders/create
@@ -67,11 +70,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    // Resolve identity via the cookie-bound client (anon, JWT-aware).
+    // Then INSERT via the service-role client so we sidestep any
+    // RLS-JWT drift — same trust model since the server, not the
+    // client, decides what user_id to write.
+    const supabaseAuth = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await supabaseAuth.auth.getUser();
     const userId = user?.id ?? null;
+    const supabase = createSupabaseAdminClient();
 
     // Compute money on the server — the client sends unit prices,
     // but the row totals (subtotal/total) get re-derived here so a

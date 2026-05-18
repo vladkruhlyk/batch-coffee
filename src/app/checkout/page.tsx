@@ -11,6 +11,7 @@ import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
 import { createOrder } from "@/lib/orders";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -146,11 +147,24 @@ export default function CheckoutPage() {
     setSubmitting(true);
     setError(null);
     try {
+      // RLS gates the insert by `auth.uid() = user_id` (logged-in) OR
+      // `both are null` (guest). The zustand `user` field can fall out
+      // of sync with the actual Supabase session — old session token
+      // expired, account deleted server-side, etc — so we ask Supabase
+      // directly RIGHT BEFORE the insert and pass whatever it returns.
+      // If there's no session, user_id stays null and the guest branch
+      // of the policy applies.
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user: liveUser },
+      } = await supabase.auth.getUser();
+      const userId = liveUser?.id ?? null;
+
       const { id, number, viewToken } = await createOrder({
         // Logged in → tie the order to the profile so it shows up
         // in /account/orders. Guest → null, the order is only
         // reachable via the /order/[number] URL.
-        userId: user?.id ?? null,
+        userId,
         recipientFirstName: firstName.trim(),
         recipientLastName: lastName.trim(),
         recipientPhone: normalizePhone(phone),

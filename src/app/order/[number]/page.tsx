@@ -112,6 +112,42 @@ function OrderDetailInner() {
     };
   }, [number, token, hydrated]);
 
+  // Auto-poll while a card payment is in "waiting on webhook" limbo.
+  // Polls every 3 seconds for up to ~2 minutes, then gives up — by
+  // that point WayForPay either failed entirely or the customer
+  // closed the tab. Stops the moment the status moves OFF pending.
+  useEffect(() => {
+    if (!order) return;
+    if (order.paymentMethod !== "card") return;
+    if (order.status !== "pending") return;
+    let cancelled = false;
+    let ticks = 0;
+    const maxTicks = 40; // 40 × 3s = 2 min
+    const id = window.setInterval(async () => {
+      ticks += 1;
+      if (cancelled || ticks > maxTicks) {
+        window.clearInterval(id);
+        return;
+      }
+      try {
+        const fresh = await getOrderForView(number!, token);
+        if (cancelled || !fresh) return;
+        if (fresh.status !== "pending") {
+          setOrder(fresh);
+          const evs = await listOrderEventsForView(fresh.id, token);
+          if (!cancelled) setEvents(evs);
+          window.clearInterval(id);
+        }
+      } catch {
+        /* swallow — keep polling */
+      }
+    }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [order, number, token]);
+
   return (
     <>
       <Header />
@@ -153,7 +189,13 @@ function Body({
   const [fresh] = useState(
     () => Date.now() - new Date(order.createdAt).getTime() < 30_000,
   );
-  const tone = statusTone(order.status);
+
+  // Contextual pill — generic statusLabel() reads "Очікує оплату" for
+  // any pending order, which is wrong for card payments where the
+  // customer JUST entered their card. Override the copy based on
+  // payment method so the wording matches what the buyer actually
+  // experienced.
+  const display = customerStatusDisplay(order);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -192,15 +234,28 @@ function Body({
           )}
           <span
             className={cn(
-              "inline-flex items-center text-[10px] tracking-[0.25em] uppercase rounded-full px-2.5 py-1",
-              tone.bg,
-              tone.text,
+              "inline-flex items-center gap-2 text-[10px] tracking-[0.25em] uppercase rounded-full px-2.5 py-1",
+              display.bg,
+              display.text,
             )}
           >
-            {statusLabel(order.status)}
+            {display.spinning && (
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+            )}
+            {display.label}
           </span>
         </div>
       </motion.div>
+
+      {/* When the order is in card-payment limbo (we created it, the
+          customer paid on WayForPay, the webhook hasn't landed yet),
+          show a friendly explainer + auto-poll for status updates. */}
+      {display.spinning && (
+        <p className="mt-6 max-w-md mx-auto text-center text-sm text-[var(--color-text-secondary)] leading-relaxed">
+          Оплата завершилась — чекаємо підтвердження від WayForPay.
+          Зазвичай це займає кілька секунд, сторінка оновиться сама.
+        </p>
+      )}
 
       <div className="mt-12 grid gap-5 lg:gap-6">
         {/* Items */}
@@ -495,5 +550,47 @@ function formatDateTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+/** Customer-facing status display — overrides the generic statusLabel
+ *  for `pending` orders because the wording depends on payment method:
+ *
+ *    pending + card  → "Перевіряємо оплату" + spinner (we're waiting
+ *                       on the WayForPay webhook to confirm)
+ *    pending + cod   → "Очікує оплату при отриманні" (customer pays
+ *                       when they pick up)
+ *    paid / packing / shipped / delivered / cancelled → standard label
+ *
+ *  Returns the tailwind class strings inline so the pill renders the
+ *  same way regardless of which branch we hit. */
+function customerStatusDisplay(order: OrderWithItems): {
+  label: string;
+  bg: string;
+  text: string;
+  spinning: boolean;
+} {
+  if (order.status === "pending") {
+    if (order.paymentMethod === "card") {
+      return {
+        label: "Перевіряємо оплату",
+        bg: "bg-sky-100",
+        text: "text-sky-800",
+        spinning: true,
+      };
+    }
+    return {
+      label: "Очікує оплату при отриманні",
+      bg: "bg-amber-100",
+      text: "text-amber-800",
+      spinning: false,
+    };
+  }
+  const tone = statusTone(order.status);
+  return {
+    label: statusLabel(order.status),
+    bg: tone.bg,
+    text: tone.text,
+    spinning: false,
+  };
 }
 

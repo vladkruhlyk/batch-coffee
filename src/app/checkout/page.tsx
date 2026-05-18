@@ -9,9 +9,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
-import { createOrder } from "@/lib/orders";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -147,48 +145,51 @@ export default function CheckoutPage() {
     setSubmitting(true);
     setError(null);
     try {
-      // RLS gates the insert by `auth.uid() = user_id` (logged-in) OR
-      // `both are null` (guest). The zustand `user` field can fall out
-      // of sync with the actual Supabase session — old session token
-      // expired, account deleted server-side, etc — so we ask Supabase
-      // directly RIGHT BEFORE the insert and pass whatever it returns.
-      // If there's no session, user_id stays null and the guest branch
-      // of the policy applies.
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user: liveUser },
-      } = await supabase.auth.getUser();
-      const userId = liveUser?.id ?? null;
-
-      const { id, number, viewToken } = await createOrder({
-        // Logged in → tie the order to the profile so it shows up
-        // in /account/orders. Guest → null, the order is only
-        // reachable via the /order/[number] URL.
-        userId,
-        recipientFirstName: firstName.trim(),
-        recipientLastName: lastName.trim(),
-        recipientPhone: normalizePhone(phone),
-        recipientEmail: email.trim() || user?.email || null,
-        deliveryMethod: "pickup",
-        deliveryAddress: PICKUP_ADDRESS.line1,
-        deliveryCity: "Полтава",
-        paymentMethod: payment,
-        comment: comment.trim() || null,
-        deliveryFee,
-        items: effectiveItems.map((it) => ({
-          productSlug: it.slug,
-          productName: it.name,
-          thumb: it.thumb,
-          weightLabel: it.weightLabel,
-          weightGrams: it.weightGrams,
-          roast: it.roast ?? null,
-          grind: it.grind ?? null,
-          // Pay the wholesale-aware price, not the cart snapshot. If
-          // wholesale never kicked in this is identical to unitPrice.
-          unitPrice: it.effectiveUnitPrice,
-          quantity: it.quantity,
-        })),
+      // Server-side order creation. The route reads auth.uid()
+      // directly from the request's cookies, so RLS's "auth.uid() =
+      // user_id" check always sees a coherent pair. Previously we
+      // inserted from the browser with a zustand-cached user.id —
+      // any drift between the two would trip the policy.
+      const res = await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          recipientFirstName: firstName.trim(),
+          recipientLastName: lastName.trim(),
+          recipientPhone: normalizePhone(phone),
+          recipientEmail: email.trim() || user?.email || null,
+          deliveryMethod: "pickup",
+          deliveryAddress: PICKUP_ADDRESS.line1,
+          deliveryCity: "Полтава",
+          paymentMethod: payment,
+          comment: comment.trim() || null,
+          deliveryFee,
+          items: effectiveItems.map((it) => ({
+            productSlug: it.slug,
+            productName: it.name,
+            thumb: it.thumb,
+            weightLabel: it.weightLabel,
+            weightGrams: it.weightGrams,
+            roast: it.roast ?? null,
+            grind: it.grind ?? null,
+            // Pay the wholesale-aware price, not the cart snapshot.
+            unitPrice: it.effectiveUnitPrice,
+            quantity: it.quantity,
+          })),
+        }),
       });
+      if (!res.ok) {
+        const detail = await res
+          .json()
+          .then((j) => j.error)
+          .catch(() => res.statusText);
+        throw new Error(detail || "не вдалось створити замовлення");
+      }
+      const { id, number, viewToken } = (await res.json()) as {
+        id: string;
+        number: string;
+        viewToken: string;
+      };
       clearCart();
       if (payment === "card") {
         // Online card → kick off WayForPay. Backend builds the signed

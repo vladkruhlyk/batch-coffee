@@ -19,14 +19,16 @@ import type { OrderWithItems } from "../orders";
  *
  * Server-only — runs with the service-role key inside an API route.
  */
-export async function buildWayForPayPayload(order: OrderWithItems): Promise<{
+export async function buildWayForPayPayload(
+  order: OrderWithItems,
+  siteUrl: string,
+): Promise<{
   action: string;
   fields: Array<{ name: string; value: string }>;
 }> {
   const supabase = createSupabaseAdminClient();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl?.startsWith("http")) {
-    throw new Error("NEXT_PUBLIC_SITE_URL must be an absolute public URL");
+    throw new Error("WayForPay site URL must be an absolute public URL");
   }
 
   // Fresh ref per attempt so WayForPay doesn't reject duplicates.

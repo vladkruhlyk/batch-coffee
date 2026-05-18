@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const payload = await buildWayForPayPayload(order);
+    const payload = await buildWayForPayPayload(order, req.nextUrl.origin);
     return NextResponse.json(payload);
   } catch (e) {
     // Without this catch, Next's default 500 response is an HTML page —

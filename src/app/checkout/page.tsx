@@ -190,13 +190,12 @@ export default function CheckoutPage() {
         number: string;
         viewToken: string;
       };
-      clearCart();
       if (payment === "card") {
         // Online card → kick off WayForPay. Backend builds the signed
-        // form payload; we render it in a hidden <form> and auto-
-        // submit, which redirects the browser to WayForPay's hosted
-        // page. They handle the rest (3DS, etc) and POST the result
-        // to /api/wayforpay/webhook in the background.
+        // form payload; we then POST the browser to WayForPay's hosted
+        // page. Keep the cart intact until the redirect actually starts:
+        // if the provider rejects the payload or the browser blocks the
+        // navigation, the customer should not lose their cart.
         const res = await fetch("/api/wayforpay/start", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -219,6 +218,7 @@ export default function CheckoutPage() {
         return;
       }
       // COD path — straight to confirmation page.
+      clearCart();
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
       // Pull a human-readable message out of whatever was thrown:
@@ -858,30 +858,31 @@ function WayForPayAutoForm({
   action: string;
   fields: Array<{ name: string; value: string }>;
 }) {
-  const formRef = useRef<HTMLFormElement | null>(null);
   useEffect(() => {
+    const form = document.createElement("form");
+    form.action = action;
+    form.method = "POST";
+    form.acceptCharset = "utf-8";
+    form.style.display = "none";
+    form.setAttribute("aria-hidden", "true");
+
+    for (const { name, value } of fields) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
     const id = window.setTimeout(() => {
-      formRef.current?.submit();
+      form.submit();
     }, 0);
-    return () => window.clearTimeout(id);
-  }, []);
-  return (
-    <form
-      ref={formRef}
-      action={action}
-      method="POST"
-      acceptCharset="utf-8"
-      className="hidden"
-      aria-hidden
-    >
-      {fields.map(({ name, value }, index) => (
-        <input
-          key={`${name}-${index}`}
-          type="hidden"
-          name={name}
-          value={value}
-        />
-      ))}
-    </form>
-  );
+    return () => {
+      window.clearTimeout(id);
+      form.remove();
+    };
+  }, [action, fields]);
+
+  return null;
 }

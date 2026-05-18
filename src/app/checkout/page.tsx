@@ -206,11 +206,12 @@ export default function CheckoutPage() {
       // COD path — straight to confirmation page.
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
-      // Surface the underlying error rather than a generic line — saves
-      // a debugging round-trip when a migration is missing, RLS rejects,
-      // or Supabase is down. Worst case it's slightly technical, but
-      // better than "спробуй ще раз" with no clue why.
-      const detail = e instanceof Error ? e.message : String(e);
+      // Pull a human-readable message out of whatever was thrown:
+      // Error → .message; Postgrest/Supabase errors are plain objects
+      // with a .message property; everything else falls through to
+      // String(). The previous version stringified Supabase errors to
+      // "[object Object]", which was a debugging dead-end.
+      const detail = extractErrorMessage(e);
       console.error("Order submission failed:", e);
       setError(`Не вдалось оформити: ${detail}`);
       setSubmitting(false);
@@ -807,6 +808,27 @@ function PaymentOption({
       </p>
     </button>
   );
+}
+
+/** Best-effort string from anything thrown. Handles `Error` instances,
+ *  Supabase / PostgREST error objects (plain `{ message, details, hint }`),
+ *  and arbitrary values via `String()`. Returned message is suitable for
+ *  showing inline to the user without further sanitisation. */
+function extractErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (typeof e === "object" && e !== null) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === "string") return obj.message;
+    if (typeof obj.error === "string") return obj.error;
+    if (typeof obj.details === "string") return obj.details;
+    try {
+      return JSON.stringify(obj);
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(e);
 }
 
 /**

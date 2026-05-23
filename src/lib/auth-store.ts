@@ -180,7 +180,7 @@ export const useAuth = create<AuthState>()(
       },
 
       // ---------------------------------------------------------------
-      // Phone — mock
+      // Phone — real Supabase OTP delivered via SMS Club hook
       // ---------------------------------------------------------------
 
       requestCode: async (phone: string) => {
@@ -192,8 +192,22 @@ export const useAuth = create<AuthState>()(
           }));
           return;
         }
-        // Mock latency so the UI's loading state has a moment to breathe.
-        await new Promise((r) => setTimeout(r, 350));
+        const supabase = createSupabaseBrowserClient();
+        const { error } = await supabase.auth.signInWithOtp({
+          phone: normalized,
+          options: {
+            // Same UX as email: auto-provision the account on first
+            // login. Profile row materialises via on_auth_user_created.
+            shouldCreateUser: true,
+          },
+        });
+        if (error) {
+          set((s) => ({
+            error: error.message || "Не вдалось надіслати код.",
+            errorBump: s.errorBump + 1,
+          }));
+          return;
+        }
         set({
           pendingPhone: normalized,
           step: "code-sent",
@@ -203,9 +217,11 @@ export const useAuth = create<AuthState>()(
 
       verifyCode: async (code: string) => {
         const trimmed = code.trim();
-        if (!/^\d{4}$/.test(trimmed)) {
+        // Phone OTP length matches Supabase's Phone provider setting
+        // (currently 6 digits — same as email for consistency).
+        if (!/^\d{6}$/.test(trimmed)) {
           set((s) => ({
-            error: "Код складається з 4 цифр.",
+            error: "Код складається з 6 цифр.",
             errorBump: s.errorBump + 1,
           }));
           return false;
@@ -219,23 +235,50 @@ export const useAuth = create<AuthState>()(
           }));
           return false;
         }
-        // Mock latency for UX polish.
-        await new Promise((r) => setTimeout(r, 450));
 
-        // Mock acceptance: any 4-digit code works. Once we swap in Supabase
-        // we'll get a real session token here and `user` becomes whatever
-        // the backend assigns. For now: synthesise a user from the phone.
-        const now = new Date().toISOString();
-        set({
+        const supabase = createSupabaseBrowserClient();
+        const { data, error } = await supabase.auth.verifyOtp({
+          phone: pendingPhone,
+          token: trimmed,
+          type: "sms",
+        });
+        if (error || !data.user) {
+          set((s) => ({
+            error: error?.message || "Невірний код. Спробуй ще раз.",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+
+        // Pull profile fields — populated by the on_auth_user_created
+        // trigger at signup, then enriched by the onboarding step.
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name, last_name, phone, email, newsletter, is_admin")
+          .eq("id", data.user.id)
+          .maybeSingle();
+
+        const phone = profile?.phone ?? data.user.phone ?? pendingPhone;
+        const firstName = profile?.first_name ?? undefined;
+        const lastName = profile?.last_name ?? undefined;
+        const needsProfile = !firstName || !lastName || !phone;
+
+        set((s) => ({
           user: {
-            id: `mock-${pendingPhone}`,
-            phone: pendingPhone,
-            createdAt: now,
+            id: data.user!.id,
+            phone,
+            email: data.user!.email ?? undefined,
+            firstName,
+            lastName,
+            newsletter: profile?.newsletter ?? undefined,
+            isAdmin: profile?.is_admin ?? false,
+            createdAt: data.user!.created_at ?? new Date().toISOString(),
           },
           pendingPhone: null,
-          step: "idle",
+          step: needsProfile ? "needs-profile" : "idle",
           error: null,
-        });
+          errorBump: s.errorBump,
+        }));
         return true;
       },
 

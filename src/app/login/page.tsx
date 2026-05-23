@@ -123,7 +123,7 @@ function LoginInner() {
                   key="code-phone"
                   destination={pendingPhone}
                   destinationLabel="phone"
-                  codeLength={4}
+                  codeLength={6}
                   error={error}
                   errorBump={errorBump}
                   onVerify={verifyCode}
@@ -141,6 +141,7 @@ function LoginInner() {
                 errorBump={errorBump}
                 onMethodChange={setMethod}
                 onSubmitEmail={requestEmailCode}
+                onSubmitPhone={requestCode}
               />
             )}
           </AnimatePresence>
@@ -160,12 +161,14 @@ function EntryStep({
   errorBump,
   onMethodChange,
   onSubmitEmail,
+  onSubmitPhone,
 }: {
   method: AuthMethod;
   error: string | null;
   errorBump: number;
   onMethodChange: (m: AuthMethod) => void;
   onSubmitEmail: (email: string) => Promise<void>;
+  onSubmitPhone: (phone: string) => Promise<void>;
 }) {
   return (
     <motion.section
@@ -180,15 +183,15 @@ function EntryStep({
       <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-[-0.035em] mt-4">
         {method === "email"
           ? "Заходимо за email."
-          : "Вхід за номером телефона."}
+          : "Заходимо за номером телефона."}
       </h1>
       <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
         {method === "email"
           ? "Введи свою адресу — пришлемо код на пошту. Якщо акаунту ще нема — створимо його за секунду."
-          : "SMS-вхід тимчасово недоступний — налаштовуємо. Поки що, будь ласка, скористайся входом за email."}
+          : "Введи свій номер — пришлемо код у SMS. Якщо акаунту ще нема — створимо його за секунду. Без паролів, без зайвих кроків."}
       </p>
 
-      {/* Method tabs — phone is primary, email is the alternate. */}
+      {/* Method tabs — both methods are live; switch by clicking. */}
       <MethodTabs method={method} onChange={onMethodChange} />
 
       {/* AnimatePresence swap so the field morphs in on tab change instead
@@ -202,9 +205,11 @@ function EntryStep({
             onSubmit={onSubmitEmail}
           />
         ) : (
-          <PhoneInDevelopment
-            key="phone-soon"
-            onSwitchToEmail={() => onMethodChange("email")}
+          <PhoneField
+            key="phone-field"
+            error={error}
+            errorBump={errorBump}
+            onSubmit={onSubmitPhone}
           />
         )}
       </AnimatePresence>
@@ -213,41 +218,89 @@ function EntryStep({
 }
 
 // ---------------------------------------------------------------------------
-// Phone tab placeholder — SMS provider isn't wired up yet, so we render a
-// notice instead of an input. Keeps the tab visible so customers know
-// phone login is on the roadmap. Delete this component (and the branch
-// above) once real OTP is hooked through Twilio / TurboSMS — the
-// `PhoneField` already lives in git history.
+// Phone field — real Supabase OTP via the SMS Club hook.
 // ---------------------------------------------------------------------------
 
-function PhoneInDevelopment({
-  onSwitchToEmail,
+function PhoneField({
+  error,
+  errorBump,
+  onSubmit,
 }: {
-  onSwitchToEmail: () => void;
+  error: string | null;
+  errorBump: number;
+  onSubmit: (phone: string) => Promise<void>;
 }) {
+  const [value, setValue] = useState("+380 ");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    // Allow only digits, spaces, and a leading "+". Keep prefix sticky so
+    // the user can't accidentally delete the country code.
+    let v = e.target.value;
+    if (!v.startsWith("+")) v = "+" + v.replace(/[^\d]/g, "");
+    const normalized = normalizePhone(v);
+    // Format Ukrainian numbers as the user types — purely cosmetic.
+    setValue(
+      normalized.startsWith("+380") && normalized.length > 4
+        ? formatPhone(normalized.padEnd(13, "_")).replaceAll("_", "").trimEnd()
+        : normalized,
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(value);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <motion.div
+    <motion.form
+      onSubmit={handleSubmit}
+      className="mt-8"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.3, ease: EASING.smooth }}
-      className="mt-8 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-6 py-7"
     >
-      <span className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)]">
-        У розробці
-      </span>
-      <p className="mt-3 text-[var(--color-text-primary)] leading-relaxed">
-        SMS-вхід ще не підключений. Поки що використай вхід за email — це
-        займе хвилину.
-      </p>
-      <button
-        type="button"
-        onClick={onSwitchToEmail}
-        className="mt-6 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85"
+      <label
+        htmlFor="phone"
+        className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
       >
-        Увійти через email <ArrowRight className="h-4 w-4" />
+        Номер телефону
+      </label>
+      <input
+        id="phone"
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel"
+        autoFocus
+        value={value}
+        onChange={handleChange}
+        placeholder="+380 50 123 45 67"
+        className="w-full text-xl font-display tabular-nums bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
+      />
+
+      <ErrorLine error={error} errorBump={errorBump} />
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="mt-8 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85 disabled:opacity-60 disabled:cursor-wait"
+      >
+        {submitting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            Отримати код <ArrowRight className="h-4 w-4" />
+          </>
+        )}
       </button>
-    </motion.div>
+    </motion.form>
   );
 }
 

@@ -277,12 +277,13 @@ export const useAuth = create<AuthState>()(
 
       verifyEmailCode: async (code: string) => {
         const trimmed = code.trim();
-        // Our Supabase project is set to 8-digit email OTP (Auth →
-        // Email → OTP length). If you ever change it, sync both this
-        // regex AND `codeLength` on the email branch of CodeStep.
-        if (!/^\d{8}$/.test(trimmed)) {
+        // 6 digits matches both the phone OTP (Supabase default) and
+        // the email OTP length we configured at Auth → Email. Keep the
+        // two in sync — if email OTP length ever moves, update this
+        // regex and the `codeLength` prop on the email CodeStep.
+        if (!/^\d{6}$/.test(trimmed)) {
           set((s) => ({
-            error: "Код складається з 8 цифр.",
+            error: "Код складається з 6 цифр.",
             errorBump: s.errorBump + 1,
           }));
           return false;

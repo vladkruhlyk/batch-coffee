@@ -109,7 +109,7 @@ function LoginInner() {
                   key="code-email"
                   destination={pendingEmail}
                   destinationLabel="email"
-                  codeLength={8}
+                  codeLength={6}
                   error={error}
                   errorBump={errorBump}
                   onVerify={verifyEmailCode}

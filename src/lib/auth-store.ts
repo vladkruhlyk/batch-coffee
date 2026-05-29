@@ -5,17 +5,17 @@ import { createSupabaseBrowserClient } from "./supabase/client";
 /**
  * Auth store — two login methods, single user shape.
  *
- * The page exposes two flows:
- *   - "phone" → OTP over SMS. Today this is fully mocked (any 4-digit
- *     code passes). We'll swap in `supabase.auth.signInWithOtp({ phone })`
- *     once an SMS gateway (Twilio / TurboSMS / SMSc.ua) is configured on
- *     the Supabase project. The signatures here are deliberately shaped
- *     to match that swap with zero UI churn.
- *   - "email" → real Supabase email OTP. `signInWithOtp({ email })`
- *     sends a 6-digit token; `verifyOtp({ email, token, type: "email" })`
- *     exchanges it for a session. We mirror the resulting Supabase user
- *     into our `user` field so every consumer of `useAuth` keeps working
- *     identically across both methods.
+ * Both flows are live in production:
+ *   - "phone" → Supabase `signInWithOtp({ phone })`; the Send-SMS hook
+ *     at /api/auth/send-sms forwards the OTP to SMS Club for delivery.
+ *     Verification is `verifyOtp({ phone, token, type: "sms" })`.
+ *   - "email" → Supabase `signInWithOtp({ email })`; SMTP delivery is
+ *     handled by Supabase itself. Verification is
+ *     `verifyOtp({ email, token, type: "email" })`.
+ *
+ * Both 6-digit codes, both mirror the resulting Supabase user into our
+ * `user` field so every consumer of `useAuth` keeps working identically
+ * across the two methods.
  *
  * Supabase manages its own httpOnly cookie + refresh token rotation. We
  * persist a thin mirror of the user object in localStorage so the UI can
@@ -26,7 +26,7 @@ import { createSupabaseBrowserClient } from "./supabase/client";
 export type AuthMethod = "phone" | "email";
 
 export interface AuthUser {
-  /** Stable id. Supabase assigns UUID; phone-mock derives from phone. */
+  /** Stable Supabase auth UUID. */
   id: string;
   /** International E.164 phone, e.g. "+380501234567". Empty for email-only users. */
   phone: string;

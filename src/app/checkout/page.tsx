@@ -190,12 +190,17 @@ export default function CheckoutPage() {
         number: string;
         viewToken: string;
       };
+      // Order is in the DB; whatever happens next (success, retry, abort),
+      // the customer's cart should not stay populated with the same items.
+      // Both card and COD paths clear here. If payment then fails on the
+      // card side, the customer keeps a pending order they can revisit
+      // from /account/orders or their emailed confirmation; re-adding the
+      // same items would otherwise create a second BAT-NNNN row in DB.
+      clearCart();
       if (payment === "card") {
         // Online card → kick off WayForPay. Backend builds the signed
         // form payload; we then POST the browser to WayForPay's hosted
-        // page. Keep the cart intact until the redirect actually starts:
-        // if the provider rejects the payload or the browser blocks the
-        // navigation, the customer should not lose their cart.
+        // page.
         const res = await fetch("/api/wayforpay/start", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -218,7 +223,6 @@ export default function CheckoutPage() {
         return;
       }
       // COD path — straight to confirmation page.
-      clearCart();
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
       // Pull a human-readable message out of whatever was thrown:

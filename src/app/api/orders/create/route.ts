@@ -70,6 +70,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Bounds on items so a tampered client can't blow up the DB or
+    // submit nonsensical numbers. 100 lines is more than any real
+    // coffee order, and prices are integer hryvnias so we cap at a
+    // generous ceiling rather than try to guess a reasonable max.
+    if (body.items.length > 100) {
+      return NextResponse.json(
+        { error: "too many items in cart" },
+        { status: 400 },
+      );
+    }
+    for (const it of body.items) {
+      if (
+        !Number.isFinite(it.unitPrice) ||
+        it.unitPrice < 0 ||
+        it.unitPrice > 1_000_000 ||
+        !Number.isInteger(it.quantity) ||
+        it.quantity < 1 ||
+        it.quantity > 999
+      ) {
+        return NextResponse.json(
+          {
+            error: `invalid line — slug=${it.productSlug}, qty=${it.quantity}, price=${it.unitPrice}`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+    if (
+      !Number.isFinite(body.deliveryFee) ||
+      body.deliveryFee < 0 ||
+      body.deliveryFee > 100_000
+    ) {
+      return NextResponse.json(
+        { error: "invalid delivery fee" },
+        { status: 400 },
+      );
+    }
+
     // Resolve identity via the cookie-bound client (anon, JWT-aware).
     // Then INSERT via the service-role client so we sidestep any
     // RLS-JWT drift — same trust model since the server, not the

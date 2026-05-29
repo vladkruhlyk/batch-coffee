@@ -98,14 +98,17 @@ interface AuthState {
    *  required onboarding fields use `completeOnboarding`. */
   updateProfile: (patch: Partial<Omit<AuthUser, "id" | "createdAt">>) => void;
 
-  /** Persist required onboarding fields (firstName / lastName / phone) to
-   *  the `profiles` table and update the local user. Returns true on
-   *  success. Sets `step` back to "idle" so the login page's redirect
-   *  effect kicks in afterward. */
+  /** Persist required onboarding fields (firstName / lastName) to the
+   *  `profiles` table and update the local user. Phone is already known
+   *  from the login method, so we don't re-ask for it — we keep whatever
+   *  is on `user.phone`. Optionally accepts a phone override for the
+   *  rare case where it's somehow missing. Returns true on success.
+   *  Sets `step` back to "idle" so the login page's redirect effect
+   *  kicks in afterward. */
   completeOnboarding: (patch: {
     firstName: string;
     lastName: string;
-    phone: string;
+    phone?: string;
   }) => Promise<boolean>;
 
   /** Read the Supabase session and overwrite `user` if a real session exists.
@@ -155,11 +158,10 @@ export const useAuth = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      // Email is the live method right now — phone OTP gateway isn't
-      // configured yet, so we default to the flow that actually works.
-      // The phone tab is still rendered but shows an "in development"
-      // notice instead of the input.
-      method: "email",
+      // Phone is the only login method exposed in the UI. The email
+      // helpers below still exist on the store (unused) so the shape
+      // stays stable, but the login page no longer offers email.
+      method: "phone",
       pendingPhone: null,
       pendingEmail: null,
       step: "idle",
@@ -441,7 +443,11 @@ export const useAuth = create<AuthState>()(
 
         const firstName = patch.firstName.trim();
         const lastName = patch.lastName.trim();
-        const phone = normalizePhone(patch.phone);
+        // Phone is established by the login method; fall back to it when
+        // the onboarding form doesn't pass one (which is the normal case
+        // now that we're phone-only). Only validate format if we ended
+        // up with something.
+        const phone = normalizePhone(patch.phone ?? current.phone ?? "");
 
         if (!firstName || !lastName) {
           set((s) => ({
@@ -450,7 +456,7 @@ export const useAuth = create<AuthState>()(
           }));
           return false;
         }
-        if (!/^\+\d{7,15}$/.test(phone)) {
+        if (phone && !/^\+\d{7,15}$/.test(phone)) {
           set((s) => ({
             error: "Введи номер у міжнародному форматі — починаючи з «+».",
             errorBump: s.errorBump + 1,

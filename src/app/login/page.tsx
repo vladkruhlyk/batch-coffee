@@ -19,7 +19,6 @@ import {
   useAuth,
   formatPhone,
   normalizePhone,
-  type AuthMethod,
   type AuthUser,
 } from "@/lib/auth-store";
 import { EASING } from "@/lib/easing";
@@ -57,25 +56,20 @@ function LoginInner() {
 
   const user = useAuth((s) => s.user);
   const step = useAuth((s) => s.step);
-  const method = useAuth((s) => s.method);
   const pendingPhone = useAuth((s) => s.pendingPhone);
-  const pendingEmail = useAuth((s) => s.pendingEmail);
   const error = useAuth((s) => s.error);
   const errorBump = useAuth((s) => s.errorBump);
   const hydrated = useAuth((s) => s.hydrated);
-  const setMethod = useAuth((s) => s.setMethod);
   const requestCode = useAuth((s) => s.requestCode);
   const verifyCode = useAuth((s) => s.verifyCode);
-  const requestEmailCode = useAuth((s) => s.requestEmailCode);
-  const verifyEmailCode = useAuth((s) => s.verifyEmailCode);
   const resetFlow = useAuth((s) => s.resetFlow);
   const completeOnboarding = useAuth((s) => s.completeOnboarding);
 
   // Already logged in AND profile is complete? Bounce immediately. We
   // wait for hydration so we don't flash the login form during the
   // SSR → client handoff. The `step === "idle"` guard keeps the user
-  // on the onboarding screen if `verifyEmailCode` flagged them as
-  // needing to fill in name + phone first.
+  // on the onboarding screen if `verifyCode` flagged them as needing to
+  // fill in their name first.
   useEffect(() => {
     if (hydrated && user && step === "idle") {
       router.replace(nextHref);
@@ -104,43 +98,24 @@ function LoginInner() {
                 onSubmit={completeOnboarding}
               />
             ) : step === "code-sent" ? (
-              method === "email" ? (
-                <CodeStep
-                  key="code-email"
-                  destination={pendingEmail}
-                  destinationLabel="email"
-                  codeLength={6}
-                  error={error}
-                  errorBump={errorBump}
-                  onVerify={verifyEmailCode}
-                  onBack={resetFlow}
-                  onResend={async () => {
-                    if (pendingEmail) await requestEmailCode(pendingEmail);
-                  }}
-                />
-              ) : (
-                <CodeStep
-                  key="code-phone"
-                  destination={pendingPhone}
-                  destinationLabel="phone"
-                  codeLength={6}
-                  error={error}
-                  errorBump={errorBump}
-                  onVerify={verifyCode}
-                  onBack={resetFlow}
-                  onResend={async () => {
-                    if (pendingPhone) await requestCode(pendingPhone);
-                  }}
-                />
-              )
+              <CodeStep
+                key="code-phone"
+                destination={pendingPhone}
+                destinationLabel="phone"
+                codeLength={6}
+                error={error}
+                errorBump={errorBump}
+                onVerify={verifyCode}
+                onBack={resetFlow}
+                onResend={async () => {
+                  if (pendingPhone) await requestCode(pendingPhone);
+                }}
+              />
             ) : (
               <EntryStep
                 key="entry"
-                method={method}
                 error={error}
                 errorBump={errorBump}
-                onMethodChange={setMethod}
-                onSubmitEmail={requestEmailCode}
                 onSubmitPhone={requestCode}
               />
             )}
@@ -152,22 +127,18 @@ function LoginInner() {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — method toggle + matching input (phone OR email).
+// Step 1 — phone entry. Phone is the only login method: one method means
+// one account, so a customer can never end up with a duplicate (email
+// account + phone account for the same person).
 // ---------------------------------------------------------------------------
 
 function EntryStep({
-  method,
   error,
   errorBump,
-  onMethodChange,
-  onSubmitEmail,
   onSubmitPhone,
 }: {
-  method: AuthMethod;
   error: string | null;
   errorBump: number;
-  onMethodChange: (m: AuthMethod) => void;
-  onSubmitEmail: (email: string) => Promise<void>;
   onSubmitPhone: (phone: string) => Promise<void>;
 }) {
   return (
@@ -181,38 +152,14 @@ function EntryStep({
         Вхід / Реєстрація
       </span>
       <h1 className="font-display font-semibold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-[-0.035em] mt-4">
-        {method === "email"
-          ? "Заходимо за email."
-          : "Заходимо за номером телефона."}
+        Заходимо за номером телефона.
       </h1>
       <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
-        {method === "email"
-          ? "Введи свою адресу — пришлемо код на пошту. Якщо акаунту ще нема — створимо його за секунду."
-          : "Введи свій номер — пришлемо код у SMS. Якщо акаунту ще нема — створимо його за секунду. Без паролів, без зайвих кроків."}
+        Введи свій номер — пришлемо код у SMS. Якщо акаунту ще нема —
+        створимо його за секунду. Без паролів, без зайвих кроків.
       </p>
 
-      {/* Method tabs — both methods are live; switch by clicking. */}
-      <MethodTabs method={method} onChange={onMethodChange} />
-
-      {/* AnimatePresence swap so the field morphs in on tab change instead
-          of popping. Mode "wait" prevents both forms rendering at once. */}
-      <AnimatePresence mode="wait">
-        {method === "email" ? (
-          <EmailField
-            key="email-field"
-            error={error}
-            errorBump={errorBump}
-            onSubmit={onSubmitEmail}
-          />
-        ) : (
-          <PhoneField
-            key="phone-field"
-            error={error}
-            errorBump={errorBump}
-            onSubmit={onSubmitPhone}
-          />
-        )}
-      </AnimatePresence>
+      <PhoneField error={error} errorBump={errorBump} onSubmit={onSubmitPhone} />
     </motion.section>
   );
 }
@@ -305,128 +252,10 @@ function PhoneField({
 }
 
 // ---------------------------------------------------------------------------
-// Method tabs — segmented control.
-// ---------------------------------------------------------------------------
-
-function MethodTabs({
-  method,
-  onChange,
-}: {
-  method: AuthMethod;
-  onChange: (m: AuthMethod) => void;
-}) {
-  const tabs: Array<{ key: AuthMethod; label: string }> = [
-    { key: "phone", label: "Телефон" },
-    { key: "email", label: "Email" },
-  ];
-  return (
-    <div
-      role="tablist"
-      aria-label="Метод входу"
-      className="mt-9 inline-flex rounded-full border border-[var(--color-border-strong)] p-1 bg-[var(--color-bg-primary)]"
-    >
-      {tabs.map((t) => {
-        const active = method === t.key;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.key)}
-            className={cn(
-              "px-5 py-2 text-xs tracking-[0.18em] uppercase rounded-full transition-colors",
-              active
-                ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
-            )}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Email field (Step 1, email method).
-// ---------------------------------------------------------------------------
-
-function EmailField({
-  error,
-  errorBump,
-  onSubmit,
-}: {
-  error: string | null;
-  errorBump: number;
-  onSubmit: (email: string) => Promise<void>;
-}) {
-  const [value, setValue] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await onSubmit(value);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <motion.form
-      onSubmit={handleSubmit}
-      className="mt-8"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.3, ease: EASING.smooth }}
-    >
-      <label
-        htmlFor="email"
-        className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
-      >
-        Email
-      </label>
-      <input
-        id="email"
-        type="email"
-        inputMode="email"
-        autoComplete="email"
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="you@example.com"
-        className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
-      />
-
-      <ErrorLine error={error} errorBump={errorBump} />
-
-      <button
-        type="submit"
-        disabled={submitting}
-        className="mt-8 inline-flex items-center gap-3 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-4 text-sm tracking-[0.12em] uppercase transition-opacity duration-300 hover:opacity-85 disabled:opacity-60 disabled:cursor-wait"
-      >
-        {submitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <>
-            Отримати код <ArrowRight className="h-4 w-4" />
-          </>
-        )}
-      </button>
-    </motion.form>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Step 2 — OTP grid with auto-advance + resend countdown.
 //
-// Shared between phone (4 cells, mock) and email (6 cells, Supabase). Cell
-// width shrinks when length=6 so 6 cells still fit on a 360px viewport.
+// Phone OTP is 6 digits; cell width shrinks for 6 cells so they still
+// fit on a 360px viewport.
 // ---------------------------------------------------------------------------
 
 const RESEND_SECONDS = 60;
@@ -712,38 +541,23 @@ function OnboardingStep({
   onSubmit: (patch: {
     firstName: string;
     lastName: string;
-    phone: string;
   }) => Promise<boolean>;
 }) {
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
-  // Pre-fill phone with "+380 " unless we already have one from Supabase.
-  const [phone, setPhone] = useState(() => {
-    const p = user?.phone?.trim();
-    return p && p !== "" ? formatPhone(p) : "+380 ";
-  });
   const [submitting, setSubmitting] = useState(false);
 
-  const handlePhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
-    // Same sticky-prefix + Ukrainian auto-format trick as the (now-disabled)
-    // phone login field. Keeps display nice without rewriting the value
-    // every keystroke on non-UA numbers.
-    let v = e.target.value;
-    if (!v.startsWith("+")) v = "+" + v.replace(/[^\d]/g, "");
-    const normalized = normalizePhone(v);
-    setPhone(
-      normalized.startsWith("+380") && normalized.length > 4
-        ? formatPhone(normalized.padEnd(13, "_")).replaceAll("_", "").trimEnd()
-        : normalized,
-    );
-  };
+  // Phone is already verified via the login OTP, so we only collect the
+  // name here. Display it as confirmation so the customer knows which
+  // number their account is tied to.
+  const verifiedPhone = formatPhone(user?.phone);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     try {
-      await onSubmit({ firstName, lastName, phone });
+      await onSubmit({ firstName, lastName });
     } finally {
       setSubmitting(false);
     }
@@ -764,7 +578,16 @@ function OnboardingStep({
       </h1>
       <p className="text-[var(--color-text-secondary)] leading-relaxed mt-5">
         Ім&apos;я та прізвище потрібні, щоб привітатися й оформити доставку.
-        Номер — щоб кур&apos;єр міг зв&apos;язатися перед прибуттям.
+        {verifiedPhone ? (
+          <>
+            {" "}
+            Акаунт прив&apos;язано до номера{" "}
+            <span className="text-[var(--color-text-primary)] font-medium tabular-nums">
+              {verifiedPhone}
+            </span>
+            .
+          </>
+        ) : null}
       </p>
 
       <form onSubmit={handleSubmit} className="mt-10 space-y-7">
@@ -802,25 +625,6 @@ function OnboardingStep({
             onChange={(e) => setLastName(e.target.value)}
             placeholder="Кругляк"
             className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="onboarding-phone"
-            className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
-          >
-            Номер телефону
-          </label>
-          <input
-            id="onboarding-phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={phone}
-            onChange={handlePhoneChange}
-            placeholder="+380 50 123 45 67"
-            className="w-full text-xl font-display tabular-nums bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
           />
         </div>
 

@@ -2,12 +2,16 @@
  * Toggle the `profiles.is_admin` flag from the CLI — handier than
  * opening Supabase Studio every time a teammate needs access.
  *
- *   cd web && npx tsx scripts/grant-admin.ts <email>
- *   cd web && npx tsx scripts/grant-admin.ts <email> --revoke
+ *   cd web && npx tsx scripts/grant-admin.ts <phone-or-email>
+ *   cd web && npx tsx scripts/grant-admin.ts <phone-or-email> --revoke
  *   cd web && npx tsx scripts/grant-admin.ts --list
  *
- * Uses the service-role key so RLS is bypassed. The target user must
- * already have signed up — we look them up in `profiles` by email.
+ * The site is phone-login only now, so the common case is a phone
+ * number. The identifier auto-detects: a leading "+" or all-digits is
+ * treated as a phone, anything with "@" as an email. The target user
+ * must already have signed up — we look them up in `profiles`.
+ *
+ * Uses the service-role key so RLS is bypassed.
  */
 import { createClient } from "@supabase/supabase-js";
 import { config as loadEnv } from "dotenv";
@@ -27,10 +31,21 @@ const supabase = createClient(url, serviceKey, {
   auth: { persistSession: false },
 });
 
+/** Strip to a normalised E.164-ish phone, or return null if this
+ *  doesn't look like a phone at all. */
+function asPhone(input: string): string | null {
+  const t = input.trim();
+  if (t.includes("@")) return null; // it's an email
+  const hasPlus = t.startsWith("+");
+  const digits = t.replace(/\D/g, "");
+  if (digits.length < 7) return null;
+  return (hasPlus ? "+" : "+") + digits; // always store with leading +
+}
+
 async function listAdmins() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("email, first_name, last_name, created_at")
+    .select("phone, email, first_name, last_name, created_at")
     .eq("is_admin", true)
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -42,30 +57,34 @@ async function listAdmins() {
   for (const row of data) {
     const name =
       [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
-    console.log(`  · ${row.email ?? "(no email)"}  —  ${name}`);
+    const contact = row.phone ?? row.email ?? "(no contact)";
+    console.log(`  · ${contact}  —  ${name}`);
   }
 }
 
-async function setAdmin(email: string, value: boolean) {
+async function setAdmin(identifier: string, value: boolean) {
+  const phone = asPhone(identifier);
+  const column = phone ? "phone" : "email";
+  const lookupValue = phone ?? identifier.trim();
+
   const { data, error } = await supabase
     .from("profiles")
     .update({ is_admin: value })
-    .eq("email", email)
-    .select("id, email, first_name, last_name, is_admin")
+    .eq(column, lookupValue)
+    .select("id, phone, email, first_name, last_name, is_admin")
     .maybeSingle();
   if (error) throw error;
   if (!data) {
     console.error(
-      `No profile with email ${email}. The user must sign up first ` +
-        `(complete the email OTP + onboarding flow), then re-run this.`,
+      `No profile with ${column} ${lookupValue}. The user must sign up ` +
+        `first (complete the phone OTP + onboarding flow), then re-run this.`,
     );
     process.exit(1);
   }
   const name =
     [data.first_name, data.last_name].filter(Boolean).join(" ") || "(no name)";
-  console.log(
-    `${value ? "Granted" : "Revoked"} admin: ${data.email}  —  ${name}`,
-  );
+  const contact = data.phone ?? data.email ?? "(no contact)";
+  console.log(`${value ? "Granted" : "Revoked"} admin: ${contact}  —  ${name}`);
 }
 
 (async () => {
@@ -74,9 +93,13 @@ async function setAdmin(email: string, value: boolean) {
     console.log(
       [
         "Usage:",
-        "  npx tsx scripts/grant-admin.ts <email>           # grant admin",
-        "  npx tsx scripts/grant-admin.ts <email> --revoke  # remove admin",
-        "  npx tsx scripts/grant-admin.ts --list            # show current admins",
+        "  npx tsx scripts/grant-admin.ts <phone-or-email>           # grant admin",
+        "  npx tsx scripts/grant-admin.ts <phone-or-email> --revoke  # remove admin",
+        "  npx tsx scripts/grant-admin.ts --list                     # show current admins",
+        "",
+        "Examples:",
+        "  npx tsx scripts/grant-admin.ts +380991234567",
+        "  npx tsx scripts/grant-admin.ts owner@example.com --revoke",
       ].join("\n"),
     );
     process.exit(0);
@@ -85,9 +108,9 @@ async function setAdmin(email: string, value: boolean) {
     await listAdmins();
     return;
   }
-  const email = args[0];
+  const identifier = args[0];
   const revoke = args.includes("--revoke");
-  await setAdmin(email, !revoke);
+  await setAdmin(identifier, !revoke);
 })().catch((e) => {
   console.error("Failed:", e);
   process.exit(1);

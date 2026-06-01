@@ -147,6 +147,19 @@ export function formatPhone(phone: string | null | undefined): string {
   return n;
 }
 
+/**
+ * Supabase stores phones in E.164 WITHOUT the leading "+" (e.g.
+ * "380999663346"). Our display + validation logic expects the "+", so
+ * any phone read back from auth.users / profiles must be re-plused.
+ * Returns "" for empty input. Idempotent — a value that already has
+ * "+" passes through unchanged.
+ */
+export function ensurePlus(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const digits = String(raw).replace(/\D/g, "");
+  return digits ? "+" + digits : "";
+}
+
 /** Minimal RFC-5321-ish check — Supabase will do the real validation. We
  *  only block the obviously-wrong cases so the UI can surface them inline
  *  without a network round-trip. */
@@ -260,7 +273,10 @@ export const useAuth = create<AuthState>()(
           .eq("id", data.user.id)
           .maybeSingle();
 
-        const phone = profile?.phone ?? data.user.phone ?? pendingPhone;
+        // Supabase phones come back without "+", so re-plus. pendingPhone
+        // already has it (it's the user's typed input).
+        const phone =
+          ensurePlus(profile?.phone ?? data.user.phone) || pendingPhone;
         const firstName = profile?.first_name ?? undefined;
         const lastName = profile?.last_name ?? undefined;
         const needsProfile = !firstName || !lastName || !phone;
@@ -369,7 +385,7 @@ export const useAuth = create<AuthState>()(
           .eq("id", u.id)
           .maybeSingle();
 
-        const phone = profile?.phone ?? u.phone ?? "";
+        const phone = ensurePlus(profile?.phone ?? u.phone);
         const firstName = profile?.first_name ?? undefined;
         const lastName = profile?.last_name ?? undefined;
         const needsProfile = !firstName || !lastName || !phone;
@@ -445,9 +461,11 @@ export const useAuth = create<AuthState>()(
         const lastName = patch.lastName.trim();
         // Phone is established by the login method; fall back to it when
         // the onboarding form doesn't pass one (which is the normal case
-        // now that we're phone-only). Only validate format if we ended
-        // up with something.
-        const phone = normalizePhone(patch.phone ?? current.phone ?? "");
+        // now that we're phone-only). ensurePlus re-adds the "+" that
+        // Supabase strips, so the E.164 validation below passes.
+        const phone = patch.phone
+          ? normalizePhone(patch.phone)
+          : ensurePlus(current.phone);
 
         if (!firstName || !lastName) {
           set((s) => ({
@@ -507,7 +525,7 @@ export const useAuth = create<AuthState>()(
           .eq("id", u.id)
           .maybeSingle();
 
-        const phone = profile?.phone ?? u.phone ?? "";
+        const phone = ensurePlus(profile?.phone ?? u.phone);
         const firstName = profile?.first_name ?? undefined;
         const lastName = profile?.last_name ?? undefined;
         const needsProfile = !firstName || !lastName || !phone;

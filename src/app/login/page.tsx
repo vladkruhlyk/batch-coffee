@@ -605,7 +605,7 @@ function OnboardingStep({
             autoFocus
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Влад"
+            placeholder="Андрій"
             className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
           />
         </div>
@@ -623,7 +623,7 @@ function OnboardingStep({
             autoComplete="family-name"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            placeholder="Кругляк"
+            placeholder="Коваленко"
             className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
           />
         </div>

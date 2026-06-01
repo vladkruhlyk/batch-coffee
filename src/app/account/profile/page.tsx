@@ -105,7 +105,7 @@ export default function ProfilePage() {
             label="Імʼя"
             value={firstName}
             onChange={setFirstName}
-            placeholder="Влад"
+            placeholder="Андрій"
             autoComplete="given-name"
           />
           <Field
@@ -113,7 +113,7 @@ export default function ProfilePage() {
             label="Прізвище"
             value={lastName}
             onChange={setLastName}
-            placeholder="Кругляк"
+            placeholder="Коваленко"
             autoComplete="family-name"
           />
           <div className="sm:col-span-2">

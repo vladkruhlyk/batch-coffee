@@ -154,7 +154,7 @@ const ADDRESSES: MockAddress[] = [
   {
     id: "addr-1",
     label: "Дім",
-    recipient: "Влад Кругляк",
+    recipient: "Андрій Коваленко",
     phone: "+380 50 123 45 67",
     city: "Київ",
     destination: "вул. Хрещатик 22, відділення №47",
@@ -163,7 +163,7 @@ const ADDRESSES: MockAddress[] = [
   {
     id: "addr-2",
     label: "Робота",
-    recipient: "Влад Кругляк",
+    recipient: "Андрій Коваленко",
     phone: "+380 50 123 45 67",
     city: "Київ",
     destination: "Поштомат №118, ТРЦ Gulliver",

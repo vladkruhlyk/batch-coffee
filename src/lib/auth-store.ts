@@ -482,15 +482,23 @@ export const useAuth = create<AuthState>()(
           return false;
         }
 
+        // Upsert, not update. The on_auth_user_created trigger SHOULD
+        // have created this profile row at signup, but if it didn't
+        // (trigger missing / broken), a plain UPDATE would silently
+        // affect 0 rows and the name would never save. Upsert creates
+        // the row when absent and updates it when present — onboarding
+        // can't fail just because the trigger didn't fire.
         const supabase = createSupabaseBrowserClient();
-        const { error } = await supabase
-          .from("profiles")
-          .update({
+        const { error } = await supabase.from("profiles").upsert(
+          {
+            id: current.id,
             first_name: firstName,
             last_name: lastName,
-            phone,
-          })
-          .eq("id", current.id);
+            phone: phone || null,
+            email: current.email ?? null,
+          },
+          { onConflict: "id" },
+        );
 
         if (error) {
           set((s) => ({

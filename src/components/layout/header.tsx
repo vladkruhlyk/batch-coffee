@@ -48,7 +48,7 @@ export function Header({ overlay = false }: HeaderProps) {
   return (
     <>
       <motion.header
-        initial={{ y: -80, opacity: 0 }}
+        initial={false}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.8, ease: EASING.smooth, delay: 0.2 }}
         className={cn(

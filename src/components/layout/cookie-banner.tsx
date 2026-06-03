@@ -2,11 +2,22 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { EASING } from "@/lib/easing";
 
 const STORAGE_KEY = "batch-cookie-consent";
+
+function subscribeToStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", onStoreChange);
+  return () => window.removeEventListener("storage", onStoreChange);
+}
+
+function shouldShowBanner() {
+  if (typeof window === "undefined") return false;
+  return !window.localStorage.getItem(STORAGE_KEY);
+}
 
 /**
  * Minimal cookie consent banner.
@@ -22,17 +33,17 @@ const STORAGE_KEY = "batch-cookie-consent";
  * we'll add a "Manage cookies" link in the footer that wipes localStorage.
  */
 export function CookieBanner() {
-  // Lazy init reads localStorage during the very first render. SSR sees
-  // `false`; the client hydrates with the real value. Avoids setState
-  // inside useEffect, which React 19 lint forbids.
-  const [visible, setVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !window.localStorage.getItem(STORAGE_KEY);
-  });
+  const shouldShow = useSyncExternalStore(
+    subscribeToStorage,
+    shouldShowBanner,
+    () => false,
+  );
+  const [dismissed, setDismissed] = useState(false);
+  const visible = shouldShow && !dismissed;
 
   const accept = () => {
     window.localStorage.setItem(STORAGE_KEY, "accepted");
-    setVisible(false);
+    setDismissed(true);
   };
 
   const decline = () => {
@@ -40,7 +51,7 @@ export function CookieBanner() {
     // really just "stop showing the banner". When we add a proper cookie
     // manager we'll split essential vs. analytics here.
     window.localStorage.setItem(STORAGE_KEY, "dismissed");
-    setVisible(false);
+    setDismissed(true);
   };
 
   return (

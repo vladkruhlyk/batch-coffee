@@ -19,7 +19,7 @@ import { EASING } from "@/lib/easing";
 export default function Template({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: EASING.smooth }}
     >

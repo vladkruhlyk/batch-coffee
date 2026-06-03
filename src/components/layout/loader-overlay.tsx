@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 /**
  * First-visit splash loader.
@@ -11,8 +11,8 @@ import { useEffect, useState } from "react";
  * one filled petal. Frames swap every 500ms; after the final frame the
  * splash holds briefly then fades out and unmounts.
  *
- * Suppressed for the rest of the session via `sessionStorage` so navigating
- * between routes (or refreshing within the tab) doesn't replay it.
+ * Suppressed after the first completed play via `localStorage` so navigating
+ * between routes, refreshing, or returning later doesn't replay it.
  *
  * Frames live in `public/2.png` … `public/5.png` (the empty `1.png` state
  * was dropped — splash starts already with one petal filled). All are
@@ -47,14 +47,25 @@ const STORAGE_KEY = "batch-loader-shown-v2";
 // Standard "expo out" easing — fast then settles. Matches the rest of the site.
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
+function subscribeToStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", onStoreChange);
+  return () => window.removeEventListener("storage", onStoreChange);
+}
+
+function shouldShowLoader() {
+  if (typeof window === "undefined") return false;
+  return !window.localStorage.getItem(STORAGE_KEY);
+}
+
 export function LoaderOverlay() {
-  // Read persisted state during render via lazy init — avoids the
-  // setState-in-effect anti-pattern (and saves a render). `typeof
-  // window` guard keeps SSR happy.
-  const [show, setShow] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return !localStorage.getItem(STORAGE_KEY);
-  });
+  const shouldShow = useSyncExternalStore(
+    subscribeToStorage,
+    shouldShowLoader,
+    () => false,
+  );
+  const [dismissed, setDismissed] = useState(false);
+  const show = shouldShow && !dismissed;
   const [frame, setFrame] = useState(FIRST_FRAME);
 
   useEffect(() => {
@@ -77,7 +88,7 @@ export function LoaderOverlay() {
         // dev doesn't trip the early-return on remount and skip the splash.
         window.setTimeout(() => {
           localStorage.setItem(STORAGE_KEY, "1");
-          setShow(false);
+          setDismissed(true);
         }, HOLD_AFTER_LAST_MS);
         return;
       }
@@ -88,7 +99,7 @@ export function LoaderOverlay() {
       clearInterval(tick);
       document.body.style.overflow = prevOverflow;
     };
-  }, []);
+  }, [show]);
 
   // Restore body scroll once the exit animation finishes.
   useEffect(() => {

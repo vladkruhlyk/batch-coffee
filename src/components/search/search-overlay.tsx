@@ -13,12 +13,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EASING } from "@/lib/easing";
 import { useSearch } from "@/lib/search-store";
 import { cn, formatPrice } from "@/lib/utils";
-import {
-  CATEGORIES,
-  getAllProducts,
-  getStartingPrice,
-  type Product,
-} from "@/data/products";
+import { CATEGORIES, getStartingPrice, type Product } from "@/data/products";
+import { client as sanityClient } from "@/sanity/lib/client";
+import { adaptProduct, type SanityProduct } from "@/sanity/lib/adapters";
+import { PRODUCTS_QUERY } from "@/sanity/queries";
 
 /**
  * Cmd+K-style full-screen search overlay.
@@ -48,8 +46,23 @@ export function SearchOverlay() {
   // clamp a stale index when results shrink.
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
 
-  // All products — cheap to pull once, pure function.
-  const products = useMemo(() => getAllProducts(), []);
+  // All products — fetched from Sanity (the live catalogue), not the
+  // hardcoded demo data. Loaded lazily the first time the overlay opens
+  // and cached for the session. Without this the search would only ever
+  // surface the old seed products, never anything added in Studio.
+  const [products, setProducts] = useState<Product[]>([]);
+  const fetchedRef = useRef(false);
+  useEffect(() => {
+    if (!open || fetchedRef.current) return;
+    fetchedRef.current = true;
+    sanityClient
+      .fetch<SanityProduct[]>(PRODUCTS_QUERY)
+      .then((raw) => setProducts(raw.map(adaptProduct)))
+      .catch(() => {
+        // Search just stays empty on a fetch failure — no crash.
+        fetchedRef.current = false;
+      });
+  }, [open]);
 
   // Filter + score products by query.
   const results = useMemo(() => {

@@ -77,13 +77,8 @@ export const product = defineType({
       title: "Бейдж",
       type: "string",
       group: "main",
-      options: {
-        list: [
-          { title: "Новий", value: "Новий" },
-          { title: "Bestseller", value: "Bestseller" },
-          { title: "Limited", value: "Limited" },
-        ],
-      },
+      description:
+        "Будь-який текст на картці: Новий, Bestseller, Funky, Legendary Lot тощо. Залиш порожнім — і бейджа не буде.",
     }),
     defineField({
       name: "inStock",
@@ -118,9 +113,8 @@ export const product = defineType({
       title: "Обробка",
       type: "string",
       group: "origin",
-      options: {
-        list: ["Мита", "Натуральна", "Інф'юз", "Бленд"],
-      },
+      description:
+        "Будь-який текст: Мита, Натуральна, Хані, Натуральна анаеробна, Мита + Термал шок тощо.",
     }),
     defineField({
       name: "altitude",
@@ -192,9 +186,9 @@ export const product = defineType({
       type: "array",
       of: [{ type: "string" }],
       group: "taste",
-      options: {
-        list: ["Фільтр", "Еспресо", "Універсальна"],
-      },
+      options: { layout: "tags" },
+      description:
+        "Додавай свої значення (Enter після кожного): Фільтр, Еспресо, Універсальна тощо.",
     }),
     defineField({
       name: "grinds",
@@ -202,20 +196,9 @@ export const product = defineType({
       type: "array",
       of: [{ type: "string" }],
       group: "taste",
-      options: {
-        list: [
-          "Не молоти",
-          "Еспресо",
-          "Гейзерна",
-          "Джезва",
-          "Френч-прес",
-          "V60",
-          "Кемекс",
-          "Аеропрес",
-          "Батч Брю",
-          "Чашка (дрібно)",
-        ],
-      },
+      options: { layout: "tags" },
+      description:
+        "Додавай будь-які помоли (Enter після кожного): Не молоти, Еспресо, V60, Джезва, Гейзерна, Батч Брю тощо.",
     }),
 
     // --- Variants ---
@@ -285,16 +268,8 @@ export const product = defineType({
               name: "method",
               title: "Метод",
               type: "string",
-              options: {
-                list: [
-                  "Еспресо",
-                  "V60",
-                  "Аеропрес",
-                  "Chemex",
-                  "Moka",
-                  "French Press",
-                ],
-              },
+              description:
+                "Будь-який метод: Еспресо, V60, Аеропрес, Кемекс, Джезва тощо.",
               validation: (rule) => rule.required(),
             }),
             defineField({ name: "ratio", title: "Пропорція", type: "string" }),

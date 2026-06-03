@@ -18,8 +18,11 @@ export type ProcessKind =
   | "Вайні"
   | "Ко-ферментація"
   | "Інф'юз"
-  | "Бленд";
-export type RoastProfile = "Фільтр" | "Еспресо" | "Універсальна";
+  | "Бленд"
+  // Free text — the roaster can type any process in Sanity Studio.
+  // The literals above stay as editor autocomplete hints.
+  | (string & {});
+export type RoastProfile = "Фільтр" | "Еспресо" | "Універсальна" | (string & {});
 export type GrindOption =
   | "Не молоти"
   | "Еспресо"
@@ -32,8 +35,9 @@ export type GrindOption =
   | "Батч Брю"
   | "Чашка (дрібно)"
   | "French Press"
-  | "Moka";
-export type Badge = "Новий" | "Bestseller" | "Limited";
+  | "Moka"
+  | (string & {});
+export type Badge = "Новий" | "Bestseller" | "Limited" | (string & {});
 
 /** Top-level product category. Mirrors the tiles on the homepage — "subscription"
  *  lives outside the catalogue as a separate route, everything else is a real

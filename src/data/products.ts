@@ -7,13 +7,30 @@
  * server components for static generation.
  */
 
-export type ProcessKind = "Мита" | "Натуральна" | "Інф'юз" | "Бленд";
+export type ProcessKind =
+  | "Мита"
+  | "Натуральна"
+  | "Натуральна анаеробна"
+  | "Мита + термал шок"
+  | "Натуральна + термал шок"
+  | "Sugarcane"
+  | "Хані"
+  | "Вайні"
+  | "Ко-ферментація"
+  | "Інф'юз"
+  | "Бленд";
 export type RoastProfile = "Фільтр" | "Еспресо" | "Універсальна";
 export type GrindOption =
   | "Не молоти"
   | "Еспресо"
+  | "Гейзерна"
+  | "Джезва"
+  | "Френч-прес"
   | "V60"
+  | "Кемекс"
   | "Аеропрес"
+  | "Батч Брю"
+  | "Чашка (дрібно)"
   | "French Press"
   | "Moka";
 export type Badge = "Новий" | "Bestseller" | "Limited";
@@ -62,6 +79,9 @@ export interface WeightVariant {
   grams: number;
   /** Price in UAH for this weight */
   price: number;
+  /** Optional explicit wholesale price for this variant. When set on
+   *  the 1 kg variant, it overrides the auto −15% wholesale rate. */
+  wholesalePrice?: number;
 }
 
 export interface TasteMeters {

@@ -206,10 +206,14 @@ export const product = defineType({
         list: [
           "Не молоти",
           "Еспресо",
+          "Гейзерна",
+          "Джезва",
+          "Френч-прес",
           "V60",
+          "Кемекс",
           "Аеропрес",
-          "French Press",
-          "Moka",
+          "Батч Брю",
+          "Чашка (дрібно)",
         ],
       },
     }),
@@ -244,6 +248,14 @@ export const product = defineType({
               title: "Ціна, ₴",
               type: "number",
               validation: (rule) => rule.required().min(0),
+            }),
+            defineField({
+              name: "wholesalePrice",
+              title: "Гуртова ціна, ₴",
+              type: "number",
+              description:
+                "Опціонально. Якщо задано на варіанті 1 кг — застосовується при замовленні від 3 кг цього SKU замість авто-знижки 15%.",
+              validation: (rule) => rule.min(0),
             }),
           ],
           preview: {

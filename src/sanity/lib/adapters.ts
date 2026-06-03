@@ -72,7 +72,12 @@ export interface SanityProduct {
   meters?: { acidity: number; sweetness: number; bitterness: number };
   roasts?: string[];
   grinds?: string[];
-  weights?: Array<{ label: string; grams: number; price: number }>;
+  weights?: Array<{
+    label: string;
+    grams: number;
+    price: number;
+    wholesalePrice?: number;
+  }>;
   brewing?: Array<{
     method: string;
     ratio?: string;

@@ -181,51 +181,66 @@ export function FilterSidebar({
       {/* Country */}
       <FilterGroup title="Країна">
         <ul className="flex flex-col gap-1">
-          {options.countries.map((c) => (
-            <li key={c}>
-              <CheckRow
-                active={filters.countries.includes(c)}
-                count={countFor("countries", c)}
-                onClick={() => toggle("countries", c)}
-              >
-                {c}
-              </CheckRow>
-            </li>
-          ))}
+          {options.countries.map((c) => {
+            const active = filters.countries.includes(c);
+            const count = countFor("countries", c);
+            if (!active && count === 0) return null;
+            return (
+              <li key={c}>
+                <CheckRow
+                  active={active}
+                  count={count}
+                  onClick={() => toggle("countries", c)}
+                >
+                  {c}
+                </CheckRow>
+              </li>
+            );
+          })}
         </ul>
       </FilterGroup>
 
       {/* Process */}
       <FilterGroup title="Обробка">
         <ul className="flex flex-col gap-1">
-          {options.processes.map((p) => (
-            <li key={p}>
-              <CheckRow
-                active={filters.processes.includes(p)}
-                count={countFor("processes", p)}
-                onClick={() => toggle("processes", p)}
-              >
-                {p}
-              </CheckRow>
-            </li>
-          ))}
+          {options.processes.map((p) => {
+            const active = filters.processes.includes(p);
+            const count = countFor("processes", p);
+            if (!active && count === 0) return null;
+            return (
+              <li key={p}>
+                <CheckRow
+                  active={active}
+                  count={count}
+                  onClick={() => toggle("processes", p)}
+                >
+                  {p}
+                </CheckRow>
+              </li>
+            );
+          })}
         </ul>
       </FilterGroup>
 
       {/* Roast */}
       <FilterGroup title="Обсмажка">
         <ul className="flex flex-col gap-1">
-          {options.roasts.map((r) => (
-            <li key={r}>
-              <CheckRow
-                active={filters.roasts.includes(r)}
-                count={countFor("roasts", r)}
-                onClick={() => toggle("roasts", r)}
-              >
-                {r}
-              </CheckRow>
-            </li>
-          ))}
+          {options.roasts.map((r) => {
+            const active = filters.roasts.includes(r);
+            const count = countFor("roasts", r);
+            if (!active && count === 0) return null;
+            return (
+              <li key={r}>
+                <CheckRow
+                  active={active}
+                  count={count}
+                  onClick={() => toggle("roasts", r)}
+                >
+                  {r}
+                </CheckRow>
+              </li>
+            );
+          })}
         </ul>
       </FilterGroup>
 
@@ -499,14 +514,14 @@ function CheckRow({ active, count, onClick, children }: CheckRowProps) {
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        "group flex w-full items-center justify-between gap-3 py-1.5 text-sm transition-opacity",
+        "group flex w-full items-start justify-between gap-3 py-1.5 text-left text-sm transition-opacity",
         disabled && "opacity-40 cursor-not-allowed",
       )}
     >
-      <span className="flex items-center gap-3">
+      <span className="flex min-w-0 flex-1 items-start gap-3">
         <span
           className={cn(
-            "grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors",
+            "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors",
             active
               ? "bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
               : "border-[var(--color-border-strong)] group-hover:border-[var(--color-text-primary)]",
@@ -516,7 +531,7 @@ function CheckRow({ active, count, onClick, children }: CheckRowProps) {
         </span>
         <span
           className={cn(
-            "transition-colors",
+            "min-w-0 flex-1 break-words leading-snug transition-colors",
             active
               ? "text-[var(--color-text-primary)]"
               : "text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]",
@@ -525,7 +540,7 @@ function CheckRow({ active, count, onClick, children }: CheckRowProps) {
           {children}
         </span>
       </span>
-      <span className="text-[11px] tabular-nums text-[var(--color-text-muted)]">
+      <span className="mt-0.5 shrink-0 text-[11px] tabular-nums text-[var(--color-text-muted)]">
         {count}
       </span>
     </button>

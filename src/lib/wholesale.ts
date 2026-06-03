@@ -16,9 +16,16 @@ export const WHOLESALE_DISCOUNT_PERCENT = 15;
 export const WHOLESALE_MIN_KG = 3;
 
 /** Wholesale per-kg price for a single coffee, or null if the SKU
- *  doesn't sell in kilo packs. */
+ *  doesn't sell in kilo packs.
+ *
+ *  Prefers an explicit `wholesalePrice` on the 1 kg variant (set by
+ *  the roaster — their per-kg wholesale rate). Falls back to the
+ *  computed −15% off retail when none is given. */
 export function getWholesalePerKg(product: Product): number | null {
   const kgVariant = product.weights.find((w) => w.grams === 1000);
   if (!kgVariant) return null;
+  if (kgVariant.wholesalePrice && kgVariant.wholesalePrice > 0) {
+    return Math.round(kgVariant.wholesalePrice);
+  }
   return Math.round(kgVariant.price * (1 - WHOLESALE_DISCOUNT_PERCENT / 100));
 }

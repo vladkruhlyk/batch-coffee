@@ -21,7 +21,7 @@ export const PRODUCTS_QUERY = `
     meters,
     roasts,
     grinds,
-    weights[]{ label, grams, price },
+    weights[]{ label, grams, price, wholesalePrice },
     brewing[]{ method, ratio, grind, waterTemp, time, tip },
     "gallery": gallery[]{ "url": asset->url, alt },
     fallbackGradient
@@ -43,7 +43,7 @@ export const PRODUCT_BY_SLUG_QUERY = `
     meters,
     roasts,
     grinds,
-    weights[]{ label, grams, price },
+    weights[]{ label, grams, price, wholesalePrice },
     brewing[]{ method, ratio, grind, waterTemp, time, tip },
     "gallery": gallery[]{ "url": asset->url, alt },
     fallbackGradient

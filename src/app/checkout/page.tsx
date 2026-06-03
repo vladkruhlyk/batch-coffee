@@ -237,9 +237,45 @@ export default function CheckoutPage() {
     }
   };
 
+  // Card-payment redirect in flight. We clear the cart right after the
+  // order is created (so a bailed payment can't double-submit), which
+  // means by the time the WayForPay payload is ready the cart is empty.
+  // This screen must therefore come BEFORE the empty-cart guard below,
+  // otherwise that guard fires first and the hidden auto-submit form
+  // never mounts → no redirect → "cart empty" dead end.
+  if (wfpPayload) {
+    return (
+      <>
+        <Header />
+        <main className="flex-1">
+          <Container size="default" className="pt-32 pb-24 text-center">
+            <div className="mx-auto h-12 w-12 grid place-items-center text-[var(--color-text-muted)]">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+            <h1 className="mt-6 font-display text-2xl lg:text-3xl font-semibold tracking-[-0.025em]">
+              Перенаправляємо на сторінку оплати…
+            </h1>
+            <p className="mt-3 text-[var(--color-text-secondary)]">
+              Якщо нічого не сталося за кілька секунд — перевір, чи не
+              заблокував браузер перехід.
+            </p>
+          </Container>
+        </main>
+        <Footer />
+        {/* Hidden auto-submit form that POSTs the browser to WayForPay. */}
+        <WayForPayAutoForm
+          action={wfpPayload.action}
+          fields={wfpPayload.fields}
+        />
+      </>
+    );
+  }
+
   // Empty cart edge case — bounce back to /cart so the user can't get
-  // stuck on a checkout with nothing to buy.
-  if (items.length === 0) {
+  // stuck on a checkout with nothing to buy. Skipped while an order is
+  // being submitted (the COD path clears the cart a tick before
+  // router.push lands, and we don't want a flash of this screen).
+  if (items.length === 0 && !submitting) {
     return (
       <>
         <Header />
@@ -634,15 +670,10 @@ export default function CheckoutPage() {
               </div>
             </aside>
           </form>
-          {/* Keep WayForPay's auto-submit form outside the checkout
-              <form>. Nested forms are invalid HTML and can prevent the
-              browser from posting to the hosted payment page. */}
-          {wfpPayload && (
-            <WayForPayAutoForm
-              action={wfpPayload.action}
-              fields={wfpPayload.fields}
-            />
-          )}
+          {/* The WayForPay auto-submit form lives in the dedicated
+              redirect screen above (which short-circuits this render
+              once wfpPayload is set), so nothing payment-related is
+              needed here. */}
         </Container>
       </main>
       <Footer />

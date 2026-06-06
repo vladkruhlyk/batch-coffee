@@ -370,7 +370,7 @@ function ResultRow({ product, active, query, onHover, onPick }: ResultRowProps) 
       {/* Thumb */}
       <span
         aria-hidden
-        className="h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]"
+        className="h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)] bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: product.gallery[0] }}
       />
 

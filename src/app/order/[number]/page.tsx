@@ -269,7 +269,7 @@ function Body({
               <li key={it.id} className="flex items-center gap-4">
                 <span
                   aria-hidden
-                  className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]"
+                  className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)] bg-cover bg-center bg-no-repeat"
                   style={it.thumb ? { backgroundImage: it.thumb } : undefined}
                 />
                 <div className="flex-1 min-w-0">

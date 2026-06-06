@@ -290,7 +290,7 @@ function CartLine({
     <article className="flex items-center gap-4 lg:gap-5 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] p-4 lg:p-5">
       <Link
         href={`/shop/${item.slug}`}
-        className="block h-20 w-20 lg:h-24 lg:w-24 shrink-0 rounded-[var(--radius-lg)] overflow-hidden"
+        className="block h-20 w-20 lg:h-24 lg:w-24 shrink-0 rounded-[var(--radius-lg)] overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: item.thumb }}
         aria-label={item.name}
       />

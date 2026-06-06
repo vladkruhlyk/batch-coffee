@@ -238,7 +238,7 @@ function CartLine({ item, onRemove, onQuantity }: CartLineProps) {
       >
         <span
           aria-hidden
-          className="absolute inset-0"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: item.thumb }}
         />
       </Link>

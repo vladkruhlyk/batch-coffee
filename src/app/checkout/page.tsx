@@ -580,7 +580,7 @@ export default function CheckoutPage() {
                     <li key={item.id} className="flex items-center gap-3">
                       <span
                         aria-hidden
-                        className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)]"
+                        className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-cover bg-center bg-no-repeat"
                         style={{ backgroundImage: item.thumb }}
                       />
                       <div className="flex-1 min-w-0">

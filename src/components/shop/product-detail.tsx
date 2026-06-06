@@ -138,7 +138,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 aria-hidden
               >
                 <div
-                  className="absolute inset-0"
+                  className="absolute inset-0 bg-cover bg-center bg-no-repeat"
                   style={{ backgroundImage: product.gallery[galleryIndex] }}
                 />
                 <div

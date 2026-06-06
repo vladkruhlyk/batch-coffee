@@ -75,7 +75,7 @@ export function ProductCard({ product }: ProductCardProps) {
         >
           <div
             aria-hidden
-            className="absolute inset-0"
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: product.gallery[0] }}
           />
           <div

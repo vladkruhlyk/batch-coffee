@@ -253,7 +253,7 @@ export default function OrdersPage() {
                               >
                                 <span
                                   aria-hidden
-                                  className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]"
+                                  className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)] bg-cover bg-center bg-no-repeat"
                                   style={
                                     it.thumb
                                       ? { backgroundImage: it.thumb }

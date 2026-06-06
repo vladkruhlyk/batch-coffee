@@ -196,7 +196,7 @@ function CompareCard({
 
       <Link
         href={`/shop/${product.slug}`}
-        className="block aspect-square overflow-hidden"
+        className="block aspect-square overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: product.gallery[0] }}
         aria-label={product.name}
       />

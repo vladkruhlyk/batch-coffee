@@ -53,10 +53,10 @@ export function ShopCatalog({
   const [sort, setSort] = useState<SortKey>("popular");
   const [sortOpen, setSortOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Mobile-only grid density: 1 = one big card per row, 2 = two compact.
-  // Desktop is unaffected (always sm:2 / xl:3). Default 2 — denser, more
-  // products visible at a glance, which is what most shoppers expect.
-  const [mobileCols, setMobileCols] = useState<1 | 2>(2);
+  // Mobile-only grid density: 1 = one big card per row (default, full
+  // details), 2 = two compact. Desktop is unaffected (always sm:2 /
+  // xl:3). Customers can switch to 2-up via the toolbar toggle.
+  const [mobileCols, setMobileCols] = useState<1 | 2>(1);
 
   // Price slider bounds — exact starting prices of the cheapest and most
   // expensive SKUs in the catalogue. Not rounded: the user wants the

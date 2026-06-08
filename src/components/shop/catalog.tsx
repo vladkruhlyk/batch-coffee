@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import {
+  ChevronDown,
+  Grid2x2,
+  Square,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Container } from "@/components/layout/container";
 import { ProductCard } from "@/components/shop/product-card";
@@ -47,6 +53,10 @@ export function ShopCatalog({
   const [sort, setSort] = useState<SortKey>("popular");
   const [sortOpen, setSortOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Mobile-only grid density: 1 = one big card per row, 2 = two compact.
+  // Desktop is unaffected (always sm:2 / xl:3). Default 2 — denser, more
+  // products visible at a glance, which is what most shoppers expect.
+  const [mobileCols, setMobileCols] = useState<1 | 2>(2);
 
   // Price slider bounds — exact starting prices of the cheapest and most
   // expensive SKUs in the catalogue. Not rounded: the user wants the
@@ -294,8 +304,42 @@ export function ShopCatalog({
           )}
         </div>
 
-        {/* Sort */}
-        <div className="relative">
+        <div className="flex items-center gap-3">
+          {/* Mobile grid-density toggle — 1 vs 2 columns. Hidden on lg+
+              where the responsive grid already handles density. */}
+          <div className="lg:hidden inline-flex items-center rounded-full border border-[var(--color-border-strong)] p-1">
+            <button
+              type="button"
+              onClick={() => setMobileCols(1)}
+              aria-label="Одна колонка"
+              aria-pressed={mobileCols === 1}
+              className={cn(
+                "grid h-8 w-8 place-items-center rounded-full transition-colors",
+                mobileCols === 1
+                  ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
+                  : "text-[var(--color-text-muted)]",
+              )}
+            >
+              <Square className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileCols(2)}
+              aria-label="Дві колонки"
+              aria-pressed={mobileCols === 2}
+              className={cn(
+                "grid h-8 w-8 place-items-center rounded-full transition-colors",
+                mobileCols === 2
+                  ? "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]"
+                  : "text-[var(--color-text-muted)]",
+              )}
+            >
+              <Grid2x2 className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          </div>
+
+          {/* Sort */}
+          <div className="relative">
           <button
             type="button"
             onClick={() => setSortOpen((o) => !o)}
@@ -350,6 +394,7 @@ export function ShopCatalog({
               </motion.ul>
             )}
           </AnimatePresence>
+          </div>
         </div>
       </div>
 
@@ -383,7 +428,14 @@ export function ShopCatalog({
           {filtered.length === 0 ? (
             <EmptyState onReset={resetFilters} />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-8">
+            <div
+              className={cn(
+                "grid sm:grid-cols-2 xl:grid-cols-3 sm:gap-5 lg:gap-8",
+                // Mobile density from the toggle. Tighter gap when 2-up
+                // so the compact cards don't feel cramped.
+                mobileCols === 2 ? "grid-cols-2 gap-3" : "grid-cols-1 gap-5",
+              )}
+            >
               {filtered.map((p) => (
                 <ProductCard key={p.slug} product={p} />
               ))}

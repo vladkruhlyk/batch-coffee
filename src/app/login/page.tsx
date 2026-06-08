@@ -405,7 +405,7 @@ function CodeStep({
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors mb-8"
+        className="flex w-fit items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors mb-8"
       >
         <ArrowLeft className="h-3.5 w-3.5" />{" "}
         {destinationLabel === "phone" ? "Інший номер" : "Інший email"}

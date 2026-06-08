@@ -172,7 +172,7 @@ function CategoryTile({ category, index }: TileProps) {
             whileHover={{ y: -6 }}
             transition={{ duration: 0.9, ease: EASING.smooth }}
             className={cn(
-              "pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 w-[46%] max-w-[120px] opacity-90 transition-opacity duration-500 group-hover:opacity-100",
+              "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[46%] max-w-[120px] opacity-90 transition-opacity duration-500 group-hover:opacity-100",
               isDarkTile(category.gradient) && "[filter:invert(1)_brightness(1.4)]",
             )}
           />

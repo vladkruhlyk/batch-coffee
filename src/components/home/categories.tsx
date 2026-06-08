@@ -7,6 +7,43 @@ import { SectionKicker } from "@/components/layout/section-kicker";
 import { WordReveal } from "@/components/animations/word-reveal";
 import { Reveal } from "@/components/animations/reveal";
 import { EASING } from "@/lib/easing";
+import { cn } from "@/lib/utils";
+
+/**
+ * Map a category's destination href → its line-art illustration in
+ * /public/illustrations. Keyed by href because the Sanity category
+ * docs identify themselves by route, not slug.
+ */
+const ILLUSTRATION_BY_HREF: Record<string, string> = {
+  "/shop?category=beans": "/illustrations/beans.svg",
+  "/shop?category=ground": "/illustrations/ground.svg",
+  "/shop?category=drip": "/illustrations/drip.svg",
+  "/shop?category=capsules": "/illustrations/capsules.svg",
+  "/subscription": "/illustrations/subscription.svg",
+  "/shop?category=gear": "/illustrations/accessories.svg",
+  "/shop?category=grinders": "/illustrations/grinder.svg",
+  "/shop?category=gifts": "/illustrations/giftset.svg",
+};
+
+function illustrationFor(href: string): string | null {
+  return ILLUSTRATION_BY_HREF[href] ?? null;
+}
+
+/**
+ * True if the tile's gradient starts on a dark colour — used to invert
+ * the dark line-art illustration so it reads as light on dark tiles.
+ * Parses the first #hex in the gradient and checks perceived luminance.
+ */
+function isDarkTile(gradient: string): boolean {
+  const m = gradient.match(/#([0-9a-fA-F]{6})/);
+  if (!m) return false;
+  const hex = m[1];
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  // Rec.601 luma. < 110 reads as "dark enough to invert on".
+  return 0.299 * r + 0.587 * g + 0.114 * b < 110;
+}
 
 /**
  * Home categories block — 8 laconic tiles on a 4×2 grid (2×4 on mobile).
@@ -121,6 +158,25 @@ function CategoryTile({ category, index }: TileProps) {
             className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent"
           />
         </motion.div>
+
+        {/* Line-art illustration — centred in the upper half so it
+            doesn't clash with the title pinned to the bottom. The art
+            is dark stroke; on dark tiles (e.g. Підписка) we invert it
+            to read light. Subtle float on hover. */}
+        {illustrationFor(category.href) && (
+          <motion.img
+            src={illustrationFor(category.href)!}
+            alt=""
+            aria-hidden
+            initial={{ y: 0 }}
+            whileHover={{ y: -6 }}
+            transition={{ duration: 0.9, ease: EASING.smooth }}
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 w-[46%] max-w-[120px] opacity-90 transition-opacity duration-500 group-hover:opacity-100",
+              isDarkTile(category.gradient) && "[filter:invert(1)_brightness(1.4)]",
+            )}
+          />
+        )}
 
         {/* Title + arrow, pinned bottom */}
         <div className="absolute bottom-4 left-4 right-4 lg:bottom-5 lg:left-5 lg:right-5 flex items-end justify-between gap-3 text-white">

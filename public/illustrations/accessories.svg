@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_acc" x="-18%" y="-18%" width="136%" height="136%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="14" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_acc)" stroke="#141414" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    
+    <path d="M96 178 C90 152 92 134 100 128 L146 128 C154 134 156 152 150 178 C136 186 110 186 96 178 Z"></path>
+    
+    <ellipse cx="123" cy="127" rx="25" ry="6"></ellipse>
+    <path d="M123 121 L123 112"></path>
+    <circle cx="123" cy="108" r="5"></circle>
+    
+    <path d="M150 132 C176 128 178 156 158 162"></path>
+    
+    <path d="M97 158 C72 162 58 142 60 120 C61 106 72 98 86 100"></path>
+  </g>
+</svg>

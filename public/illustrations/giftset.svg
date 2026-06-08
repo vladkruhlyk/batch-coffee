@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_gift" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="31" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_gift)" stroke="#141414" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    
+    <rect x="76" y="118" width="88" height="26" rx="8"></rect>
+    
+    <rect x="84" y="144" width="72" height="56" rx="8"></rect>
+    
+    <path d="M120 144 L120 200"></path>
+    <path d="M120 118 L120 130"></path>
+    
+    <path d="M120 116 C104 98 84 104 95 116 C100 121 113 121 120 116 Z"></path>
+    <path d="M120 116 C136 98 156 104 145 116 C140 121 127 121 120 116 Z"></path>
+    <circle cx="120" cy="116" r="4.5"></circle>
+  </g>
+</svg>

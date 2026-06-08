@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_beans" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="7" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_beans)" stroke="#141414" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="rotate(-25 96 100)">
+      <ellipse cx="96" cy="100" rx="26" ry="37"></ellipse>
+      <path d="M96 66 C106 84 86 116 96 134"></path>
+    </g>
+    <g transform="rotate(22 152 114)">
+      <ellipse cx="152" cy="114" rx="24" ry="35"></ellipse>
+      <path d="M152 81 C162 98 142 130 152 147"></path>
+    </g>
+    <g transform="rotate(-10 120 162)">
+      <ellipse cx="120" cy="162" rx="25" ry="36"></ellipse>
+      <path d="M120 128 C130 145 110 179 120 196"></path>
+    </g>
+  </g>
+</svg>

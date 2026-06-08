@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_drip" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="11" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_drip)" stroke="#141414" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    
+    <ellipse cx="120" cy="156" rx="34" ry="9"></ellipse>
+    <path d="M88 156 C88 184 98 206 120 206 C142 206 152 184 152 156"></path>
+    <path d="M152 164 C172 164 172 188 152 188"></path>
+    
+    <path d="M100 154 L100 110 Q100 101 109 101 L131 101 Q140 101 140 110 L140 154"></path>
+    <path d="M101 116 L139 116"></path>
+    
+    <path d="M100 150 L82 150 L82 163"></path>
+    <path d="M140 150 L158 150 L158 163"></path>
+  </g>
+</svg>

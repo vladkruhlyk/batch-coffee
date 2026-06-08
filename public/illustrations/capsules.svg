@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_caps" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="19" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_caps)" stroke="#141414" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="120" cy="92" rx="42" ry="13"></ellipse>
+    <ellipse cx="120" cy="92" rx="28" ry="8"></ellipse>
+    <path d="M78 92 C81 138 96 178 120 178 C144 178 159 138 162 92"></path>
+  </g>
+</svg>

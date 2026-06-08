@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_ground" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="3" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_ground)" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#141414" stroke-width="6" fill="none">
+      <path d="M54 168 C66 122 90 96 120 96 C152 96 176 124 188 168"></path>
+      <path d="M50 170 C92 182 150 182 192 170"></path>
+      <path d="M34 178 L208 178"></path>
+    </g>
+    <g fill="#141414" stroke="none">
+      <ellipse cx="104" cy="150" rx="3.6" ry="3.2"></ellipse>
+      <ellipse cx="124" cy="158" rx="4" ry="3.4"></ellipse>
+      <ellipse cx="142" cy="148" rx="3.4" ry="3"></ellipse>
+      <ellipse cx="112" cy="136" rx="3" ry="2.8"></ellipse>
+      <ellipse cx="133" cy="134" rx="3.2" ry="2.8"></ellipse>
+      <ellipse cx="120" cy="120" rx="2.8" ry="2.6"></ellipse>
+      <ellipse cx="94" cy="162" rx="3" ry="2.6"></ellipse>
+      <ellipse cx="152" cy="162" rx="3.2" ry="2.8"></ellipse>
+      <ellipse cx="120" cy="170" rx="3.4" ry="3"></ellipse>
+    </g>
+  </g>
+</svg>

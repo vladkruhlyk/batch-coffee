@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none">
+  <defs>
+    <filter id="w_grind" x="-18%" y="-18%" width="136%" height="136%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="23" result="n"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+  <g filter="url(#w_grind)" stroke="#141414" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    
+    <path d="M120 100 L120 76 L150 66"></path>
+    <circle cx="155" cy="68" r="7"></circle>
+    
+    <ellipse cx="120" cy="104" rx="34" ry="9"></ellipse>
+    <path d="M88 106 L96 120"></path>
+    <path d="M152 106 L144 120"></path>
+    
+    <rect x="92" y="118" width="56" height="74" rx="12"></rect>
+    
+    <path d="M100 168 L140 168"></path>
+    <circle cx="120" cy="180" r="3.2" fill="#141414" stroke="none"></circle>
+  </g>
+</svg>

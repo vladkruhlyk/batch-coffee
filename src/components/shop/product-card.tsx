@@ -14,6 +14,11 @@ import type { Product } from "@/data/products";
 
 interface ProductCardProps {
   product: Product;
+  /** Compact density (mobile 2-up grid). Hides secondary details below
+   *  the `sm` breakpoint — taste meters, notes, variant pills, quantity
+   *  stepper, wholesale lines — leaving image + name + price + add. On
+   *  `sm` and up everything shows regardless (the card is wide enough). */
+  compact?: boolean;
 }
 
 /**
@@ -27,7 +32,11 @@ interface ProductCardProps {
  *   - interactive roast pills — when the product offers multiple profiles
  *   - price + quick add-to-cart button (uses current selections)
  */
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, compact = false }: ProductCardProps) {
+  // Tailwind class that hides an element below `sm` only when this card
+  // is in compact (mobile 2-up) mode. Empty string otherwise so the
+  // element always shows.
+  const hideCompact = compact ? "max-sm:hidden" : "";
   const [weightIndex, setWeightIndex] = useState(0);
   const [roastIndex, setRoastIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -98,16 +107,33 @@ export function ProductCard({ product }: ProductCardProps) {
       </Link>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-5 p-5 lg:p-6">
+      <div
+        className={cn(
+          "flex flex-1 flex-col gap-5 p-5 lg:p-6",
+          compact && "max-sm:gap-3 max-sm:p-4",
+        )}
+      >
         {product.meters && (
-          <TasteMeters meters={product.meters} variant="bar-compact" />
+          <div className={hideCompact}>
+            <TasteMeters meters={product.meters} variant="bar-compact" />
+          </div>
         )}
 
         <Link href={`/shop/${product.slug}`} className="group/title block">
-          <h3 className="font-display text-xl lg:text-[22px] font-semibold leading-[1.1] tracking-[-0.02em] transition-opacity duration-300 group-hover/title:opacity-60">
+          <h3
+            className={cn(
+              "font-display text-xl lg:text-[22px] font-semibold leading-[1.1] tracking-[-0.02em] transition-opacity duration-300 group-hover/title:opacity-60",
+              compact && "max-sm:text-base",
+            )}
+          >
             {product.name}
           </h3>
-          <p className="mt-1.5 text-sm leading-snug text-[var(--color-text-secondary)]">
+          <p
+            className={cn(
+              "mt-1.5 text-sm leading-snug text-[var(--color-text-secondary)]",
+              hideCompact,
+            )}
+          >
             {product.notes?.length
               ? product.notes.join(", ")
               : product.shortDescription}
@@ -115,7 +141,7 @@ export function ProductCard({ product }: ProductCardProps) {
         </Link>
 
         {/* Interactive variant pills */}
-        <div className="flex flex-col gap-2.5">
+        <div className={cn("flex flex-col gap-2.5", hideCompact)}>
           {/* Weights — always shown (every product has at least one). */}
           <div className="flex flex-wrap gap-2">
             {product.weights.map((w, i) => (
@@ -167,11 +193,13 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <QuantityStepper
-                size="compact"
-                value={quantity}
-                onChange={setQuantity}
-              />
+              <div className={hideCompact}>
+                <QuantityStepper
+                  size="compact"
+                  value={quantity}
+                  onChange={setQuantity}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleAddToCart}
@@ -186,7 +214,7 @@ export function ProductCard({ product }: ProductCardProps) {
           {/* Wholesale state line. Two states, both compact, both
               attached to the price row so there's no floating orphan: */}
           {wholesalePerKg && !wholesaleTotal && (
-            <p className="text-[10px] tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+            <p className={cn("text-[10px] tracking-[0.18em] uppercase text-[var(--color-text-muted)]", hideCompact)}>
               Гурт від {WHOLESALE_MIN_KG} кг —{" "}
               <span className="text-[var(--color-text-primary)] font-medium tabular-nums">
                 {formatPrice(wholesalePerKg)}/кг
@@ -194,7 +222,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </p>
           )}
           {wholesaleTotal && (
-            <p className="inline-flex items-center gap-2 text-[10px] tracking-[0.18em] uppercase text-emerald-700">
+            <p className={cn("inline-flex items-center gap-2 text-[10px] tracking-[0.18em] uppercase text-emerald-700", hideCompact)}>
               ✓ Гуртова знижка{" "}
               <span className="tabular-nums">−{formatPrice(savings)}</span>
             </p>

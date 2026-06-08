@@ -437,7 +437,11 @@ export function ShopCatalog({
               )}
             >
               {filtered.map((p) => (
-                <ProductCard key={p.slug} product={p} />
+                <ProductCard
+                  key={p.slug}
+                  product={p}
+                  compact={mobileCols === 2}
+                />
               ))}
             </div>
           )}

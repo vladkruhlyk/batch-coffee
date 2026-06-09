@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Container } from "@/components/layout/container";
@@ -9,7 +9,10 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SectionKicker } from "@/components/layout/section-kicker";
 import { TasteMeters } from "@/components/shop/taste-meters";
-import { PRODUCTS, isCoffeeCategory, type Product } from "@/data/products";
+import { isCoffeeCategory, type Product } from "@/data/products";
+import { client as sanityClient } from "@/sanity/lib/client";
+import { adaptProduct, type SanityProduct } from "@/sanity/lib/adapters";
+import { PRODUCTS_QUERY } from "@/sanity/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
 
@@ -23,9 +26,31 @@ const MAX_COMPARE = 3;
  * Mobile: cards stack vertically; desktop: 3-column grid.
  */
 export default function ComparePage() {
+  // Pull the live catalogue from Sanity (same source as shop + search),
+  // not the static seed array — otherwise newly published products never
+  // show up here. Filtered to coffee categories + products with weights.
+  const [products, setProducts] = useState<Product[]>([]);
+  const fetchedRef = useRef(false);
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+    sanityClient
+      .fetch<SanityProduct[]>(PRODUCTS_QUERY)
+      .then((raw) =>
+        setProducts(
+          raw
+            .map(adaptProduct)
+            .filter((p) => p.weights && p.weights.length > 0),
+        ),
+      )
+      .catch(() => {
+        fetchedRef.current = false;
+      });
+  }, []);
+
   const candidates = useMemo(
-    () => PRODUCTS.filter((p) => isCoffeeCategory(p.category)),
-    [],
+    () => products.filter((p) => isCoffeeCategory(p.category)),
+    [products],
   );
   const [selected, setSelected] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);

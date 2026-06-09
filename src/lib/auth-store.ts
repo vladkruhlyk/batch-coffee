@@ -528,7 +528,16 @@ export const useAuth = create<AuthState>()(
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (!session?.user) return;
+        if (!session?.user) {
+          // No Supabase session — the visitor is signed out / deleted /
+          // revoked server-side. Clear any stale local mirror restored
+          // from localStorage so we stop rendering the account UI for
+          // someone who is no longer authenticated. (Both phone and
+          // email logins create real Supabase sessions, so a logged-in
+          // user always has one here.)
+          if (get().user) set({ user: null, step: "idle" });
+          return;
+        }
         const u = session.user;
 
         // Pull profile alongside — auth.users gives us id/email/phone but
@@ -588,3 +597,17 @@ export const useAuth = create<AuthState>()(
     },
   ),
 );
+
+// Cross-tab auth sync. Zustand persist writes the partialized auth state
+// to localStorage on every change (login, logout, profile edit). The
+// `storage` event fires in OTHER tabs only — so when one tab logs out
+// (writes user:null) or logs in, every other open tab re-reads the
+// persisted state and reconciles, instead of keeping a stale logged-in
+// or logged-out cabinet on screen until a manual refresh.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === "batch-auth") {
+      void useAuth.persist.rehydrate();
+    }
+  });
+}

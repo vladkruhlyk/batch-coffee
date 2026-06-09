@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Minus, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Container } from "@/components/layout/container";
@@ -15,6 +15,8 @@ import {
   getEffectiveItems,
   type EffectiveCartItem,
 } from "@/lib/cart-store";
+import { computePromoDiscount, lookupPromo } from "@/lib/promo";
+import { refreshCartPrices } from "@/lib/refresh-cart-prices";
 import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
@@ -36,27 +38,47 @@ export default function CartPage() {
   const items = useCart((s) => s.items);
   const setQuantity = useCart((s) => s.setQuantity);
   const remove = useCart((s) => s.remove);
-
+  const replaceItems = useCart((s) => s.replaceItems);
+  // Promo lives in the store now (persisted) so checkout can read it and
+  // send the *code* to the server, which recomputes the authoritative
+  // discount. The input text + error stay local to this page.
+  const promoApplied = useCart((s) => s.promoCode);
+  const setPromo = useCart((s) => s.setPromo);
   const [promoInput, setPromoInput] = useState("");
-  const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
+
+  // Refresh prices against live Sanity on mount — without this, a
+  // customer landing on /cart directly (not via checkout) sees the
+  // localStorage-snapshotted prices, which may be stale.
+  const refreshedRef = useRef(false);
+  useEffect(() => {
+    if (refreshedRef.current || items.length === 0) return;
+    refreshedRef.current = true;
+    refreshCartPrices(items)
+      .then(({ updatedItems, changed }) => {
+        if (changed.length > 0) replaceItems(updatedItems);
+      })
+      .catch(() => {
+        /* stale prices are the fallback — no crash */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const subtotal = getCartSubtotal(items);
   const effectiveItems = getEffectiveItems(items);
   const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   const count = getCartCount(items);
-  const discount = promoApplied === "BATCH10" ? Math.round(subtotal * 0.1) : 0;
+  const discount = computePromoDiscount(promoApplied, subtotal);
   const eligibleForFreeShipping = subtotal - discount >= FREE_SHIPPING_THRESHOLD;
   const shipping = eligibleForFreeShipping ? 0 : DELIVERY_BASE;
   const total = subtotal - discount + shipping;
-  const toFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - (subtotal - discount));
 
   const applyPromo = (e: React.FormEvent) => {
     e.preventDefault();
-    const code = promoInput.trim().toUpperCase();
-    if (!code) return;
-    if (code === "BATCH10") {
-      setPromoApplied(code);
+    const promo = lookupPromo(promoInput);
+    if (!promoInput.trim()) return;
+    if (promo) {
+      setPromo(promo.code);
       setPromoError(null);
     } else {
       setPromoError("Цей промокод не діє. Перевір ще раз.");
@@ -172,7 +194,7 @@ export default function CartPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setPromoApplied(null);
+                            setPromo(null);
                             setPromoInput("");
                           }}
                           className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"

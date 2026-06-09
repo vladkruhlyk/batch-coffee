@@ -3,6 +3,7 @@ import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
+import { computePromoDiscount } from "@/lib/promo";
 
 /**
  * POST /api/orders/create
@@ -48,7 +49,10 @@ interface CreateOrderBody {
   paymentMethod: "card" | "cod";
   comment: string | null;
   deliveryFee: number;
-  discount?: number;
+  /** Promo CODE only — never a discount amount. The server resolves the
+   *  discount from this so the client can't grant itself an arbitrary
+   *  one. */
+  promoCode?: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -96,6 +100,28 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      // Required string fields + weightGrams. Without this, a null/empty
+      // productSlug/productName/weightLabel or a bad weightGrams hits the
+      // NOT NULL columns and surfaces as an opaque 500 instead of a clean
+      // 400.
+      if (
+        !it.productSlug?.trim() ||
+        !it.productName?.trim() ||
+        !it.weightLabel?.trim() ||
+        !Number.isFinite(it.weightGrams) ||
+        it.weightGrams <= 0
+      ) {
+        return NextResponse.json(
+          { error: `invalid line fields — slug=${it.productSlug}` },
+          { status: 400 },
+        );
+      }
+    }
+    if (!body.deliveryAddress?.trim()) {
+      return NextResponse.json(
+        { error: "delivery address required" },
+        { status: 400 },
+      );
     }
     if (
       !Number.isFinite(body.deliveryFee) ||
@@ -127,18 +153,11 @@ export async function POST(req: NextRequest) {
       0,
     );
 
-    // Validate discount the same way the other money fields are
-    // validated above. Without this a tampered client could send a
-    // huge or NaN discount and drive `total` negative / NaN into the
-    // DB (the orders table has no CHECK on total).
-    const discount = body.discount ?? 0;
-    if (
-      !Number.isFinite(discount) ||
-      discount < 0 ||
-      discount > subtotal + body.deliveryFee
-    ) {
-      return NextResponse.json({ error: "invalid discount" }, { status: 400 });
-    }
+    // Resolve the discount SERVER-SIDE from the promo code — never trust
+    // a client-sent amount. computePromoDiscount returns 0 for an
+    // unknown/empty code, and is bounded by `subtotal` by construction
+    // (it's a percentage of subtotal), so `total` can't go negative.
+    const discount = computePromoDiscount(body.promoCode ?? null, subtotal);
 
     const total = subtotal + body.deliveryFee - discount;
     if (!Number.isFinite(total) || total <= 0) {

@@ -34,20 +34,32 @@ async function handleReturn(req: NextRequest): Promise<Response> {
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data: payment } = await supabase
+  const { data: payment, error: payErr } = await supabase
     .from("payments")
     .select("order_id")
     .eq("provider_order_ref", ref)
     .maybeSingle();
+  // Distinguish a DB error from a genuine not-found: on an error the
+  // customer HAS paid (or is mid-flow), so bouncing them to the homepage
+  // is the worst outcome. Log it and send them to their order list,
+  // where a logged-in customer can still find the order.
+  if (payErr) {
+    console.error("wayforpay/return payment lookup failed:", payErr);
+    return NextResponse.redirect(new URL("/account/orders", req.url));
+  }
   if (!payment) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  const { data: order } = await supabase
+  const { data: order, error: orderErr } = await supabase
     .from("orders")
     .select("number, view_token")
     .eq("id", payment.order_id)
     .maybeSingle();
+  if (orderErr) {
+    console.error("wayforpay/return order lookup failed:", orderErr);
+    return NextResponse.redirect(new URL("/account/orders", req.url));
+  }
   if (!order) {
     return NextResponse.redirect(new URL("/", req.url));
   }

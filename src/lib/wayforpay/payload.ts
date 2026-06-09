@@ -34,6 +34,30 @@ export async function buildWayForPayPayload(
   // Fresh ref per attempt so WayForPay doesn't reject duplicates.
   const ref = `${order.number}-${randomBytes(4).toString("hex")}`;
 
+  const orderDate = Math.floor(Date.now() / 1000);
+
+  // WayForPay wants each line item as parallel arrays. Item names get
+  // truncated to keep the request body lean.
+  const productName = order.items.map((i) => trim(i.productName, 96));
+  const productCount = order.items.map((i) => i.quantity);
+  const productPrice = order.items.map((i) => i.unitPrice);
+
+  // Compute the signature BEFORE persisting the payment row. signRequest
+  // is synchronous crypto and effectively never throws, but building +
+  // signing first means a failure here can't leave an orphan `pending`
+  // payments row behind.
+  const signature = signRequest(wayforpayMerchantSecret, {
+    merchantAccount: wayforpayMerchantAccount,
+    merchantDomainName: wayforpayMerchantDomain,
+    orderReference: ref,
+    orderDate,
+    amount: order.total,
+    currency: "UAH",
+    productName,
+    productCount,
+    productPrice,
+  });
+
   // Persist the attempt BEFORE handing the form to the customer so the
   // webhook (which races against the return redirect) always finds a
   // matching row.
@@ -46,26 +70,6 @@ export async function buildWayForPayPayload(
     currency: "UAH",
   });
   if (payErr) throw payErr;
-
-  const orderDate = Math.floor(Date.now() / 1000);
-
-  // WayForPay wants each line item as parallel arrays. Item names get
-  // truncated to keep the request body lean.
-  const productName = order.items.map((i) => trim(i.productName, 96));
-  const productCount = order.items.map((i) => i.quantity);
-  const productPrice = order.items.map((i) => i.unitPrice);
-
-  const signature = signRequest(wayforpayMerchantSecret, {
-    merchantAccount: wayforpayMerchantAccount,
-    merchantDomainName: wayforpayMerchantDomain,
-    orderReference: ref,
-    orderDate,
-    amount: order.total,
-    currency: "UAH",
-    productName,
-    productCount,
-    productPrice,
-  });
 
   const fields: Array<{ name: string; value: string }> = [
     { name: "merchantAccount", value: wayforpayMerchantAccount },

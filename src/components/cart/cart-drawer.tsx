@@ -15,6 +15,7 @@ import {
   useCart,
   type EffectiveCartItem,
 } from "@/lib/cart-store";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 /**
  * Cart drawer — slide-over sheet from the right edge.
@@ -42,15 +43,9 @@ export function CartDrawer() {
   const setQuantity = useCart((s) => s.setQuantity);
   const clear = useCart((s) => s.clear);
 
-  // Lock body scroll while open. Mirrors the existing mobile-menu pattern.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Lock body scroll while open. Ref-counted + shared with the search
+  // overlay so two overlapping overlays don't clobber each other's lock.
+  useBodyScrollLock(open);
 
   // Close on Escape — standard modal behaviour.
   useEffect(() => {

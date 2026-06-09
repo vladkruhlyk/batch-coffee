@@ -10,6 +10,7 @@ import { Footer } from "@/components/layout/footer";
 import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
+import { computePromoDiscount } from "@/lib/promo";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -36,6 +37,7 @@ export default function CheckoutPage() {
   const items = useCart((s) => s.items);
   const clearCart = useCart((s) => s.clear);
   const replaceCartItems = useCart((s) => s.replaceItems);
+  const promoCode = useCart((s) => s.promoCode);
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
 
@@ -129,7 +131,10 @@ export default function CheckoutPage() {
   const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   // Pickup is free; that's the only delivery method available right now.
   const deliveryFee = 0;
-  const total = subtotal + deliveryFee;
+  // Display-only discount. The server recomputes it from the promo code
+  // + its own subtotal, so this just keeps the summary honest.
+  const discount = computePromoDiscount(promoCode, subtotal);
+  const total = subtotal + deliveryFee - discount;
 
   const canSubmit =
     items.length > 0 &&
@@ -164,6 +169,9 @@ export default function CheckoutPage() {
           paymentMethod: payment,
           comment: comment.trim() || null,
           deliveryFee,
+          // Send only the CODE — the server recomputes the discount. A
+          // tampered client can't grant itself an arbitrary amount.
+          promoCode: promoCode ?? null,
           items: effectiveItems.map((it) => ({
             productSlug: it.slug,
             productName: it.name,
@@ -190,13 +198,6 @@ export default function CheckoutPage() {
         number: string;
         viewToken: string;
       };
-      // Order is in the DB; whatever happens next (success, retry, abort),
-      // the customer's cart should not stay populated with the same items.
-      // Both card and COD paths clear here. If payment then fails on the
-      // card side, the customer keeps a pending order they can revisit
-      // from /account/orders or their emailed confirmation; re-adding the
-      // same items would otherwise create a second BAT-NNNN row in DB.
-      clearCart();
       if (payment === "card") {
         // Online card → kick off WayForPay. Backend builds the signed
         // form payload; we then POST the browser to WayForPay's hosted
@@ -207,6 +208,11 @@ export default function CheckoutPage() {
           body: JSON.stringify({ orderId: id, viewToken }),
         });
         if (!res.ok) {
+          // Payment setup failed. We deliberately have NOT cleared the
+          // cart yet, so the catch below shows the error on the normal
+          // checkout form instead of the empty-cart guard hijacking the
+          // screen. The just-created order stays `pending` (harmless —
+          // same as any abandoned WayForPay session).
           const detail = await res
             .json()
             .then((j) => j.error)
@@ -217,12 +223,18 @@ export default function CheckoutPage() {
           action: string;
           fields: Array<{ name: string; value: string }>;
         };
+        // Only NOW that we're definitely redirecting do we clear the
+        // cart — so a bailed/failed payment doesn't strand the customer
+        // on an empty-cart screen with no way to retry.
+        clearCart();
         setWfpPayload(payload);
         // submitting stays true so the button keeps its spinner while
         // the hidden form auto-submits.
         return;
       }
-      // COD path — straight to confirmation page.
+      // COD path — order is committed, head to confirmation. Clear the
+      // cart first so navigating back doesn't re-submit the same items.
+      clearCart();
       router.push(`/order/${number}?token=${viewToken}`);
     } catch (e) {
       // Pull a human-readable message out of whatever was thrown:
@@ -237,12 +249,11 @@ export default function CheckoutPage() {
     }
   };
 
-  // Card-payment redirect in flight. We clear the cart right after the
-  // order is created (so a bailed payment can't double-submit), which
-  // means by the time the WayForPay payload is ready the cart is empty.
-  // This screen must therefore come BEFORE the empty-cart guard below,
-  // otherwise that guard fires first and the hidden auto-submit form
-  // never mounts → no redirect → "cart empty" dead end.
+  // Card-payment redirect in flight. We clear the cart at the moment we
+  // set this payload (right before redirecting), so by the time this
+  // screen renders the cart is empty. It must therefore come BEFORE the
+  // empty-cart guard below, otherwise that guard fires first and the
+  // hidden auto-submit form never mounts → no redirect → dead end.
   if (wfpPayload) {
     return (
       <>
@@ -626,6 +637,12 @@ export default function CheckoutPage() {
                       Безкоштовно
                     </dd>
                   </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-emerald-700">
+                      <dt>Знижка ({promoCode})</dt>
+                      <dd className="tabular-nums">−{formatPrice(discount)}</dd>
+                    </div>
+                  )}
                 </dl>
 
                 <div className="mt-5 pt-4 border-t border-[var(--color-border-default)] flex items-baseline justify-between">

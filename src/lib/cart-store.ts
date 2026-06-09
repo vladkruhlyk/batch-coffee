@@ -60,6 +60,11 @@ interface CartState {
   open: boolean;
   /** Increments on every add — lets UI play a pulse animation on the badge. */
   lastAddBump: number;
+  /** Applied promo code (upper-cased), or null. Persisted so it survives
+   *  the trip from /cart to /checkout. The discount itself is never
+   *  stored — it's recomputed from the code (client for display, server
+   *  for the charge) so the two can't drift. */
+  promoCode: string | null;
   add: (product: Product, opts?: AddToCartInput) => void;
   remove: (id: string) => void;
   setQuantity: (id: string, n: number) => void;
@@ -68,6 +73,7 @@ interface CartState {
    *  price-refresh step so it can update line prices in one shot
    *  without having to remove+re-add. */
   replaceItems: (items: CartItem[]) => void;
+  setPromo: (code: string | null) => void;
   openCart: () => void;
   closeCart: () => void;
   toggleCart: () => void;
@@ -88,6 +94,7 @@ export const useCart = create<CartState>()(
       items: [],
       open: false,
       lastAddBump: 0,
+      promoCode: null,
 
       add: (product, opts = {}) => {
         const weightIndex = opts.weightIndex ?? 0;
@@ -95,7 +102,12 @@ export const useCart = create<CartState>()(
         if (!weight) return;
         const roast = opts.roast ?? product.roasts?.[0];
         const grind = opts.grind;
-        const quantity = Math.max(1, opts.quantity ?? 1);
+        // Guard against NaN/invalid quantity: `Math.max(1, NaN)` is NaN,
+        // which would poison every total downstream. Coerce to 1.
+        const quantity =
+          Number.isFinite(opts.quantity) && (opts.quantity as number) > 0
+            ? Math.floor(opts.quantity as number)
+            : 1;
         const id = makeItemId(product.slug, weight.label, roast, grind);
 
         const items = [...get().items];
@@ -136,9 +148,12 @@ export const useCart = create<CartState>()(
             .filter((i) => i.quantity > 0),
         })),
 
-      clear: () => set({ items: [] }),
+      clear: () => set({ items: [], promoCode: null }),
 
       replaceItems: (items) => set({ items }),
+
+      setPromo: (code) =>
+        set({ promoCode: code ? code.trim().toUpperCase() : null }),
 
       openCart: () => set({ open: true }),
       closeCart: () => set({ open: false }),
@@ -146,7 +161,10 @@ export const useCart = create<CartState>()(
     }),
     {
       name: "batch-cart",
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => ({
+        items: state.items,
+        promoCode: state.promoCode,
+      }),
     },
   ),
 );

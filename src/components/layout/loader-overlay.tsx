@@ -65,6 +65,12 @@ export function LoaderOverlay() {
     () => false,
   );
   const [dismissed, setDismissed] = useState(false);
+  // No hydration mismatch here despite server snapshot (false) differing
+  // from a first-time visitor's client snapshot (true): useSyncExternalStore
+  // uses getServerSnapshot for BOTH the server render AND the initial
+  // hydration render, so they match, then re-renders to the client
+  // snapshot post-hydration. The splash's appearance is that intended
+  // post-hydration render, not a mismatch.
   const show = shouldShow && !dismissed;
   const [frame, setFrame] = useState(FIRST_FRAME);
 

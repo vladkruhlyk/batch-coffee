@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -17,6 +17,7 @@ import { CATEGORIES, getStartingPrice, type Product } from "@/data/products";
 import { client as sanityClient } from "@/sanity/lib/client";
 import { adaptProduct, type SanityProduct } from "@/sanity/lib/adapters";
 import { PRODUCTS_QUERY } from "@/sanity/queries";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 /**
  * Cmd+K-style full-screen search overlay.
@@ -47,14 +48,18 @@ export function SearchOverlay() {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
 
   // All products — fetched from Sanity (the live catalogue), not the
-  // hardcoded demo data. Loaded lazily the first time the overlay opens
-  // and cached for the session. Without this the search would only ever
-  // surface the old seed products, never anything added in Studio.
+  // hardcoded demo data. Re-fetched when the overlay opens if the cached
+  // copy is older than the TTL, so products (re)published in Studio
+  // mid-session show up without a full page reload. Within the TTL we
+  // reuse the cache to avoid a network call on every open.
   const [products, setProducts] = useState<Product[]>([]);
-  const fetchedRef = useRef(false);
+  const lastFetchRef = useRef(0);
+  const FRESH_MS = 2 * 60 * 1000;
   useEffect(() => {
-    if (!open || fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (!open) return;
+    const now = Date.now();
+    if (products.length > 0 && now - lastFetchRef.current < FRESH_MS) return;
+    lastFetchRef.current = now;
     sanityClient
       .fetch<SanityProduct[]>(PRODUCTS_QUERY)
       .then((raw) =>
@@ -68,9 +73,11 @@ export function SearchOverlay() {
         ),
       )
       .catch(() => {
-        // Search just stays empty on a fetch failure — no crash.
-        fetchedRef.current = false;
+        // Search just stays empty on a fetch failure — no crash. Reset
+        // the stamp so the next open retries.
+        lastFetchRef.current = 0;
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Filter + score products by query.
@@ -106,20 +113,15 @@ export function SearchOverlay() {
     return () => cancelAnimationFrame(raf);
   }, [open]);
 
-  // Lock body scroll while open.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Lock body scroll while open. Ref-counted + shared with the cart
+  // drawer so two overlapping overlays don't clobber each other's lock.
+  useBodyScrollLock(open);
 
   // Safety-net: auto-close on any route change. Most overlay links already
   // call `closeSearch` via onPick, but any future Link added inside the
   // overlay would otherwise leave it stuck open after navigation.
   const pathname = usePathname();
+  const router = useRouter();
   const prevPath = useRef(pathname);
   useEffect(() => {
     if (prevPath.current !== pathname) {
@@ -157,15 +159,16 @@ export function SearchOverlay() {
         if (pick) {
           e.preventDefault();
           closeSearch();
-          // Soft-nav via location — we don't have the router instance in this
-          // closure and keeping overlay framework-agnostic keeps it portable.
-          window.location.href = `/shop/${pick.slug}`;
+          // Soft client-side navigation — matches how result clicks
+          // (<Link>) navigate. The old `window.location.href` forced a
+          // full page reload + flash on every keyboard selection.
+          router.push(`/shop/${pick.slug}`);
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, results, activeIndex, closeSearch]);
+  }, [open, results, activeIndex, closeSearch, router]);
 
   return (
     <AnimatePresence>

@@ -4,6 +4,7 @@ import {
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { resolveOrderDiscount } from "@/lib/promo-server";
+import { resolveOrderPricing } from "@/lib/order-pricing";
 
 /**
  * POST /api/orders/create
@@ -145,13 +146,26 @@ export async function POST(req: NextRequest) {
     const userId = user?.id ?? null;
     const supabase = createSupabaseAdminClient();
 
-    // Compute money on the server — the client sends unit prices,
-    // but the row totals (subtotal/total) get re-derived here so a
-    // tampered client can't underpay.
-    const subtotal = body.items.reduce(
-      (s, i) => s + i.unitPrice * i.quantity,
-      0,
+    // Price the order SERVER-SIDE from Sanity — never trust the client's
+    // unit prices. resolveOrderPricing re-fetches each line by slug +
+    // weight, re-applies the wholesale rule, rejects deleted SKUs, and
+    // returns the authoritative unit prices + subtotal. A tampered
+    // request (e.g. unitPrice:1) therefore can't underpay.
+    const pricing = await resolveOrderPricing(
+      body.items.map((i) => ({
+        productSlug: i.productSlug,
+        weightLabel: i.weightLabel,
+        weightGrams: i.weightGrams,
+        quantity: i.quantity,
+      })),
     );
+    if (!pricing.ok) {
+      return NextResponse.json(
+        { error: pricing.error ?? "pricing failed" },
+        { status: 400 },
+      );
+    }
+    const subtotal = pricing.subtotal;
 
     // Resolve the discount SERVER-SIDE from the promo code — re-fetch the
     // rule from Sanity and re-validate (active / dates / min subtotal) so
@@ -200,28 +214,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const itemsPayload = body.items.map((i) => ({
-      order_id: order.id,
-      product_slug: i.productSlug,
-      product_name: i.productName,
-      thumb: i.thumb,
-      weight_label: i.weightLabel,
-      weight_grams: i.weightGrams,
-      roast: i.roast,
-      grind: i.grind,
-      unit_price: i.unitPrice,
-      quantity: i.quantity,
-      line_total: i.unitPrice * i.quantity,
-    }));
+    // Line items use the SERVER-priced unit prices + weights (pricing.items
+    // is index-aligned with body.items). Display-only fields (name, thumb,
+    // roast, grind) come from the client.
+    const itemsPayload = body.items.map((i, idx) => {
+      const priced = pricing.items[idx];
+      const unitPrice = priced.unitPrice;
+      return {
+        order_id: order.id,
+        product_slug: i.productSlug,
+        product_name: i.productName,
+        thumb: i.thumb,
+        weight_label: i.weightLabel,
+        weight_grams: priced.weightGrams,
+        roast: i.roast,
+        grind: i.grind,
+        unit_price: unitPrice,
+        quantity: i.quantity,
+        line_total: unitPrice * i.quantity,
+      };
+    });
     const { error: itemsErr } = await supabase
       .from("order_items")
       .insert(itemsPayload);
     if (itemsErr) {
+      // The order row is already committed but has no line items — an
+      // orphan that corrupts the ledger and could be charged for nothing.
+      // Roll it back by deleting it (no Postgres transaction across two
+      // statements here, so we compensate manually) before returning the
+      // error, so a client retry creates exactly one clean order.
       console.error("orders/create items insert failed:", itemsErr);
-      return NextResponse.json(
-        { error: itemsErr.message },
-        { status: 500 },
-      );
+      const { error: rollbackErr } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", order.id);
+      if (rollbackErr) {
+        console.error(
+          "orders/create rollback (delete orphan order) failed:",
+          rollbackErr,
+        );
+      }
+      return NextResponse.json({ error: itemsErr.message }, { status: 500 });
     }
 
     return NextResponse.json({

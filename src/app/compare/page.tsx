@@ -34,18 +34,26 @@ export default function ComparePage() {
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
+    let alive = true;
     sanityClient
       .fetch<SanityProduct[]>(PRODUCTS_QUERY)
-      .then((raw) =>
+      .then((raw) => {
+        // Guard against a state update after unmount (navigating away
+        // before the fetch resolves) — avoids the React warning + leak.
+        if (!alive) return;
         setProducts(
           raw
             .map(adaptProduct)
             .filter((p) => p.weights && p.weights.length > 0),
-        ),
-      )
+        );
+      })
       .catch(() => {
-        fetchedRef.current = false;
+        // Allow a retry on next mount rather than spinning immediately.
+        if (alive) fetchedRef.current = false;
       });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const candidates = useMemo(

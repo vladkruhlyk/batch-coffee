@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Onest } from "next/font/google";
 import localFont from "next/font/local";
 import { Providers } from "./providers";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // SN Pro — Stoyan Nikolaev, humanist sans with Cyrillic support.
@@ -42,12 +43,12 @@ export const metadata: Metadata = {
   },
   description:
     "Свіжообсмажена спешиалті кава з Полтави. Підписка, доставка по всій Україні.",
-  metadataBase: new URL("https://batch.coffee"),
+  metadataBase: new URL(SITE_URL),
   openGraph: {
     title: "BATCH Coffee Roastery",
     description:
       "Свіжообсмажена спешиалті кава з Полтави. Підписка, доставка по всій Україні.",
-    url: "https://batch.coffee",
+    url: SITE_URL,
     siteName: "BATCH Coffee",
     locale: "uk_UA",
     type: "website",

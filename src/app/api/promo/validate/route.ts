@@ -16,33 +16,44 @@ import { evaluatePromo, resolvePromoRule } from "@/lib/promo-server";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as {
-    code?: unknown;
-    subtotal?: unknown;
-  } | null;
+  try {
+    const body = (await req.json().catch(() => null)) as {
+      code?: unknown;
+      subtotal?: unknown;
+    } | null;
 
-  if (
-    !body ||
-    typeof body.code !== "string" ||
-    typeof body.subtotal !== "number" ||
-    !Number.isFinite(body.subtotal)
-  ) {
-    return NextResponse.json(
-      { ok: false, reason: "invalid request" },
-      { status: 400 },
-    );
+    if (
+      !body ||
+      typeof body.code !== "string" ||
+      typeof body.subtotal !== "number" ||
+      !Number.isFinite(body.subtotal)
+    ) {
+      return NextResponse.json(
+        { ok: false, reason: "invalid request" },
+        { status: 400 },
+      );
+    }
+
+    const subtotal = Math.max(0, body.subtotal);
+    const rule = await resolvePromoRule(body.code);
+    const result = evaluatePromo(rule, subtotal, new Date());
+
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, reason: result.reason });
+    }
+    return NextResponse.json({
+      ok: true,
+      snapshot: result.snapshot,
+      discount: result.discount,
+    });
+  } catch (err) {
+    // The Sanity fetch in resolvePromoRule can throw. Without this the
+    // route returns an HTML 500 that breaks the client's res.json() and
+    // the "always JSON" contract. Degrade to a clean rejection.
+    console.error("promo/validate failed:", err);
+    return NextResponse.json({
+      ok: false,
+      reason: "Не вдалось перевірити промокод. Спробуй ще раз.",
+    });
   }
-
-  const subtotal = Math.max(0, body.subtotal);
-  const rule = await resolvePromoRule(body.code);
-  const result = evaluatePromo(rule, subtotal, new Date());
-
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, reason: result.reason });
-  }
-  return NextResponse.json({
-    ok: true,
-    snapshot: result.snapshot,
-    discount: result.discount,
-  });
 }

@@ -144,11 +144,17 @@ export const useCart = create<CartState>()(
         set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
 
       setQuantity: (id, n) =>
-        set((state) => ({
-          items: state.items
-            .map((i) => (i.id === id ? { ...i, quantity: Math.max(1, n) } : i))
-            .filter((i) => i.quantity > 0),
-        })),
+        set((state) => {
+          // Coerce to a positive integer. `Math.max(1, n)` alone lets
+          // fractional values through and turns NaN into NaN (which then
+          // fails the >0 filter and silently deletes the line).
+          const qty = Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1;
+          return {
+            items: state.items.map((i) =>
+              i.id === id ? { ...i, quantity: qty } : i,
+            ),
+          };
+        }),
 
       clear: () => set({ items: [], promo: null }),
 

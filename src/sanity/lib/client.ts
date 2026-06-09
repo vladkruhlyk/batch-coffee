@@ -16,3 +16,18 @@ export const client = createClient({
   useCdn: true,
   perspective: "published",
 });
+
+/**
+ * CDN-bypassing client for MONEY paths (order pricing, promo charge
+ * validation). Sanity's CDN caches responses for minutes regardless of
+ * Next.js `revalidate` options — fine for product pages, NOT fine when
+ * computing what to charge: a just-raised price could bill at the stale
+ * CDN value. `useCdn: false` hits the live API directly.
+ */
+export const freshClient = createClient({
+  projectId,
+  dataset,
+  apiVersion,
+  useCdn: false,
+  perspective: "published",
+});

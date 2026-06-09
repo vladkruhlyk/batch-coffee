@@ -60,9 +60,14 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
   const wholesaleEligible =
     wholesalePerKg !== null && currentKg >= WHOLESALE_MIN_KG;
   const retailTotal = weight.price * quantity;
-  const wholesaleTotal = wholesaleEligible
-    ? Math.round(wholesalePerKg! * currentKg)
+  // Round PER UNIT then multiply — identical to getEffectiveItems in the
+  // cart store. Rounding the whole total once instead diverges by a few
+  // UAH for odd per-kg prices, so the card would show a different total
+  // than the cart/checkout. Keep the two formulas in lockstep.
+  const wholesaleUnit = wholesaleEligible
+    ? Math.round(wholesalePerKg! * (weight.grams / 1000))
     : null;
+  const wholesaleTotal = wholesaleUnit !== null ? wholesaleUnit * quantity : null;
   const displayPrice = wholesaleTotal ?? retailTotal;
   const savings = wholesaleTotal ? retailTotal - wholesaleTotal : 0;
 

@@ -5,6 +5,7 @@ import { Footer } from "@/components/layout/footer";
 import { ProductDetail } from "@/components/shop/product-detail";
 import { getStartingPrice } from "@/data/products";
 import { fetchProductBySlug, fetchProducts } from "@/sanity/lib/fetchers";
+import { SITE_URL } from "@/lib/site";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -62,7 +63,7 @@ export default async function ProductPage({ params }: PageProps) {
     category: product.category,
     offers: {
       "@type": "Offer",
-      url: `https://batch-coffee.vercel.app/shop/${product.slug}`,
+      url: `${SITE_URL}/shop/${product.slug}`,
       priceCurrency: "UAH",
       price: startingPrice,
       availability: product.inStock

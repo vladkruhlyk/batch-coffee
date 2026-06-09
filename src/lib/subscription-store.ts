@@ -72,9 +72,12 @@ function applyDiscount(unitPrice: number, quantity: number): number {
 }
 
 function addDays(iso: string, days: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
+  // Epoch math, not setDate(): setDate mutates in LOCAL calendar terms on
+  // a UTC instant, so near midnight the result can be off by a day for
+  // users in non-UTC timezones. Adding whole days as milliseconds is
+  // timezone-agnostic.
+  const t = new Date(iso).getTime();
+  return new Date(t + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 export const useSubscription = create<SubscriptionState>()(

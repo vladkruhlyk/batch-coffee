@@ -4,6 +4,7 @@ import {
   fetchJournalPosts,
   fetchProducts,
 } from "@/sanity/lib/fetchers";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * sitemap.xml — auto-generated. Next.js serves this from `/sitemap.xml`.
@@ -15,7 +16,7 @@ import {
  * Priorities are coarse heuristics — Google barely uses them, but they
  * still telegraph what we consider important to crawlers.
  */
-const BASE_URL = "https://batch-coffee.vercel.app";
+const BASE_URL = SITE_URL;
 
 const STATIC_ROUTES: Array<{ path: string; priority: number; freq: MetadataRoute.Sitemap[number]["changeFrequency"] }> = [
   { path: "/", priority: 1.0, freq: "weekly" },

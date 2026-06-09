@@ -1,4 +1,4 @@
-import { client } from "@/sanity/lib/client";
+import { freshClient } from "@/sanity/lib/client";
 import { PROMO_CODE_BY_CODE_QUERY } from "@/sanity/queries";
 import { discountFromSnapshot, type PromoSnapshot } from "./promo";
 
@@ -25,9 +25,11 @@ export async function resolvePromoRule(
   if (!rawCode || typeof rawCode !== "string") return null;
   const code = rawCode.trim().toUpperCase();
   if (!code) return null;
-  // revalidate:30 keeps lookups fresh enough that a code published in
-  // Studio works within ~30s, while still caching repeated checks.
-  const rule = await client.fetch<PromoRule | null>(
+  // freshClient bypasses Sanity's CDN so a disabled/expired code stops
+  // working immediately — the CDN would otherwise serve the old rule for
+  // minutes. revalidate:30 still caches repeat lookups in Next for 30s
+  // (publish-to-live within ~30s, no hammering on hot codes).
+  const rule = await freshClient.fetch<PromoRule | null>(
     PROMO_CODE_BY_CODE_QUERY,
     { code },
     { next: { revalidate: 30, tags: ["promoCode"] } },
@@ -90,7 +92,9 @@ export function evaluatePromo(
     Number.isFinite(rule.minSubtotal) &&
     subtotal < rule.minSubtotal
   ) {
-    return fail(`Промокод діє від суми ${Math.round(rule.minSubtotal)} ₴.`);
+    // ceil, not round — never display a threshold lower than the actual
+    // check (round(150.4)=150 would mislead a 150 ₴ cart that still fails).
+    return fail(`Промокод діє від суми ${Math.ceil(rule.minSubtotal)} ₴.`);
   }
 
   const snapshot: PromoSnapshot = {

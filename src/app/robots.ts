@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * robots.txt — served by Next at `/robots.txt`.
@@ -11,7 +12,7 @@ import type { MetadataRoute } from "next";
  *   - Point crawlers at the sitemap
  */
 export default function robots(): MetadataRoute.Robots {
-  const base = "https://batch-coffee.vercel.app";
+  const base = SITE_URL;
   return {
     rules: [
       {

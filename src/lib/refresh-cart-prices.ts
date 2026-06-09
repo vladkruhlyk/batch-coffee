@@ -101,7 +101,15 @@ export async function refreshCartPrices(
 
   const changed: PriceRefreshResult["changed"] = [];
   const updatedItems = items.map((item) => {
-    const livePrice = priceLookup.get(item.slug)?.get(item.weightLabel);
+    const rawLivePrice = priceLookup.get(item.slug)?.get(item.weightLabel);
+    // Treat a 0 / negative / non-finite live price as "no valid price" and
+    // keep the existing one. Without this, `0 ?? old` is 0 (nullish only
+    // catches null/undefined) — a misconfigured/zeroed Sanity price would
+    // silently make the cart line free.
+    const livePrice =
+      typeof rawLivePrice === "number" && rawLivePrice > 0
+        ? rawLivePrice
+        : null;
     const liveWholesale = wholesaleLookup.get(item.slug) ?? null;
     const priceChanged = livePrice != null && livePrice !== item.unitPrice;
     const wholesaleChanged =

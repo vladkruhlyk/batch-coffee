@@ -535,7 +535,14 @@ export const useAuth = create<AuthState>()(
           // someone who is no longer authenticated. (Both phone and
           // email logins create real Supabase sessions, so a logged-in
           // user always has one here.)
-          if (get().user) set({ user: null, step: "idle" });
+          //
+          // BUT only when the auth flow is idle — never mid-OTP. The
+          // verifyOtp round-trip briefly has no session yet; if a parallel
+          // sync (rehydrate / cross-tab) fired right then it would wipe the
+          // user and bounce them back to the code screen.
+          if (get().user && get().step === "idle") {
+            set({ user: null });
+          }
           return;
         }
         const u = session.user;
@@ -604,7 +611,17 @@ export const useAuth = create<AuthState>()(
 // (writes user:null) or logs in, every other open tab re-reads the
 // persisted state and reconciles, instead of keeping a stale logged-in
 // or logged-out cabinet on screen until a manual refresh.
-if (typeof window !== "undefined") {
+// Guard against duplicate registration. This module can re-evaluate under
+// Fast Refresh / HMR in dev; without the flag each reload would stack
+// another listener, multiplying rehydrate() calls on every storage event.
+// The flag lives on window so it survives module re-evaluation.
+declare global {
+  interface Window {
+    __batchAuthStorageBound?: boolean;
+  }
+}
+if (typeof window !== "undefined" && !window.__batchAuthStorageBound) {
+  window.__batchAuthStorageBound = true;
   window.addEventListener("storage", (e) => {
     if (e.key === "batch-auth") {
       void useAuth.persist.rehydrate();

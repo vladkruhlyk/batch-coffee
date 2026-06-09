@@ -38,7 +38,16 @@ export async function updateSupabaseSession(request: NextRequest) {
   // Triggers the refresh-token round trip when the access token is
   // close to expiry. Return value intentionally unused — RLS gates
   // access on the data layer, not here.
-  await supabase.auth.getUser();
+  //
+  // Wrapped in try-catch: this middleware matches nearly every route, so
+  // a transient Supabase/network failure throwing here would 500 the
+  // ENTIRE site. We degrade gracefully to "no refresh this request" —
+  // the session just refreshes on a later request instead.
+  try {
+    await supabase.auth.getUser();
+  } catch (err) {
+    console.error("updateSupabaseSession: getUser failed, skipping refresh", err);
+  }
 
   return response;
 }

@@ -695,7 +695,12 @@ function bucketTimeSeries(
 // ---------------------------------------------------------------------------
 
 function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  // Real ISO-8601 (1-indexed month, zero-padded). Today these keys are
+  // opaque bucket ids, but emitting "2026-5-9" for May 9th invites a
+  // subtle bug the moment anything parses or sorts them as dates.
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 function formatShortDate(iso: string): string {

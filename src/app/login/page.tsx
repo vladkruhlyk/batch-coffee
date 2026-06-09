@@ -538,26 +538,37 @@ function OnboardingStep({
   user: AuthUser | null;
   error: string | null;
   errorBump: number;
+  // Mirrors the store's completeOnboarding signature (incl. the optional
+  // phone) so a contract change there fails compilation here.
   onSubmit: (patch: {
     firstName: string;
     lastName: string;
+    phone?: string;
   }) => Promise<boolean>;
 }) {
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
+  const [phoneInput, setPhoneInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Phone is already verified via the login OTP, so we only collect the
-  // name here. Display it as confirmation so the customer knows which
-  // number their account is tied to.
+  // Phone is normally verified via the login OTP, so we only collect the
+  // name and display the number as confirmation. Legacy accounts created
+  // by email (before the site went phone-only) have NO phone — without a
+  // field to enter one they'd be stuck in onboarding forever, since the
+  // store requires a phone to complete it.
   const verifiedPhone = formatPhone(user?.phone);
+  const needsPhone = !user?.phone;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     try {
-      await onSubmit({ firstName, lastName });
+      await onSubmit(
+        needsPhone
+          ? { firstName, lastName, phone: phoneInput }
+          : { firstName, lastName },
+      );
     } finally {
       setSubmitting(false);
     }
@@ -627,6 +638,27 @@ function OnboardingStep({
             className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors"
           />
         </div>
+
+        {needsPhone && (
+          <div>
+            <label
+              htmlFor="onboardingPhone"
+              className="text-[11px] tracking-[0.3em] uppercase text-[var(--color-text-muted)] block mb-3"
+            >
+              Номер телефону
+            </label>
+            <input
+              id="onboardingPhone"
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              placeholder="+380 99 123 45 67"
+              className="w-full text-xl font-display bg-transparent border-b-2 border-[var(--color-border-strong)] focus:border-[var(--color-text-primary)] pb-3 outline-none transition-colors tabular-nums"
+            />
+          </div>
+        )}
 
         <ErrorLine error={error} errorBump={errorBump} />
 

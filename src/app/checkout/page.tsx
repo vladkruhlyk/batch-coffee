@@ -9,8 +9,11 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
-import { refreshCartPrices } from "@/lib/refresh-cart-prices";
-import { discountFromSnapshot } from "@/lib/promo";
+import {
+  mergeRefreshedPrices,
+  refreshCartPrices,
+} from "@/lib/refresh-cart-prices";
+import { discountFromSnapshot, type PromoSnapshot } from "@/lib/promo";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -59,6 +62,15 @@ export default function CheckoutPage() {
   const [agreed, setAgreed] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Idempotency key — one per ORDER INTENT, stable across retries so a
+  // network hiccup / double-click can't create duplicate orders (the
+  // server replays the original response for a repeated key). Reset when
+  // the cart contents change: an edited basket is a NEW intent and must
+  // not replay the old order.
+  const idemKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    idemKeyRef.current = null;
+  }, [items]);
   // Holds the auto-submit form payload returned by /api/wayforpay/start.
   // When set, an effect mounts a hidden form and submits it, redirecting
   // the browser to WayForPay's hosted page.
@@ -103,7 +115,11 @@ export default function CheckoutPage() {
     refreshCartPrices(items)
       .then(({ updatedItems, changed }) => {
         if (changed.length > 0) {
-          replaceCartItems(updatedItems);
+          // Merge by id against the live store so edits made while the
+          // fetch was in flight aren't silently undone.
+          replaceCartItems(
+            mergeRefreshedPrices(useCart.getState().items, updatedItems),
+          );
           setPriceChanges(
             changed.map((c) => ({
               name: c.name,
@@ -113,11 +129,35 @@ export default function CheckoutPage() {
             })),
           );
         }
+        // Re-validate the promo against the refreshed subtotal. The
+        // server re-validates at order creation anyway — this keeps the
+        // DISPLAYED discount in sync so the customer isn't shown one
+        // total and charged another (e.g. the code was disabled, or the
+        // new subtotal dropped below minSubtotal).
+        const promoNow = useCart.getState().promo;
+        if (promoNow) {
+          const liveSubtotal = getCartSubtotal(useCart.getState().items);
+          fetch("/api/promo/validate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: promoNow.code, subtotal: liveSubtotal }),
+          })
+            .then((r) => r.json())
+            .then((data: { ok: boolean; snapshot?: PromoSnapshot }) => {
+              const setPromo = useCart.getState().setPromo;
+              if (data.ok && data.snapshot) setPromo(data.snapshot);
+              else setPromo(null);
+            })
+            .catch(() => {
+              /* validation hiccup — server still has the final word */
+            });
+        }
       })
-      .catch(() => {
+      .catch((err) => {
         // Sanity down / network blip — fall back to cached prices.
         // Worse case: user pays what they added at, which is the
-        // pre-fix status quo.
+        // pre-fix status quo. Log so outages are visible.
+        console.error("checkout price refresh failed:", err);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
@@ -150,6 +190,17 @@ export default function CheckoutPage() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+    // Same key across retries of this basket; see idemKeyRef above.
+    // crypto.randomUUID() is available in every modern browser on HTTPS;
+    // if it's somehow missing we just send no key and the server creates
+    // the order without replay protection (the pre-idempotency behavior).
+    if (
+      !idemKeyRef.current &&
+      typeof crypto !== "undefined" &&
+      "randomUUID" in crypto
+    ) {
+      idemKeyRef.current = crypto.randomUUID();
+    }
     try {
       // Server-side order creation. The route reads auth.uid()
       // directly from the request's cookies, so RLS's "auth.uid() =
@@ -174,6 +225,7 @@ export default function CheckoutPage() {
           // and recomputes the discount. A tampered client can't grant
           // itself an arbitrary amount.
           promoCode: promo?.code ?? null,
+          idempotencyKey: idemKeyRef.current,
           items: effectiveItems.map((it) => ({
             productSlug: it.slug,
             productName: it.name,

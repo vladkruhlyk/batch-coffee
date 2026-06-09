@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     if (
       !body ||
       typeof body.code !== "string" ||
+      body.code.length > 50 ||
       typeof body.subtotal !== "number" ||
       !Number.isFinite(body.subtotal)
     ) {

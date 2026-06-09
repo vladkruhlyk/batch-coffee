@@ -19,11 +19,11 @@ import { WHOLESALE_DISCOUNT_PERCENT } from "./wholesale";
  * UI surfaces a notice so the user knows the total changed under
  * them and isn't surprised.
  *
- * NOTE on trust: this still trusts the client to send the right
- * unitPrice into createOrder. For real production we should move
- * order creation server-side and look up prices there. For now,
- * client-side refresh is at least consistent with the displayed
- * total.
+ * NOTE on trust: this refresh is DISPLAY-ONLY. The charge is computed
+ * server-side in api/orders/create via lib/order-pricing.ts, which
+ * re-fetches every line's price from Sanity (CDN-bypassed) and ignores
+ * client prices entirely. This module just keeps what the customer
+ * sees consistent with what the server will charge.
  */
 
 interface SanityWeight {
@@ -80,7 +80,11 @@ export async function refreshCartPrices(
     const weights = new Map<string, number>();
     let wholesalePerKg: number | null = null;
     for (const w of row.weights ?? []) {
-      weights.set(w.label, w.price);
+      // Trim label keys — the server's order-pricing lookup trims, so the
+      // client must too, or a stray space typed in Studio makes checkout
+      // show stale prices while the server then prices it fine (or vice
+      // versa: the display works but the order is rejected).
+      weights.set((w.label ?? "").trim(), w.price);
       if (w.grams === 1000) {
         if (w.wholesalePrice && w.wholesalePrice > 0) {
           wholesalePerKg = Math.round(w.wholesalePrice);
@@ -101,7 +105,9 @@ export async function refreshCartPrices(
 
   const changed: PriceRefreshResult["changed"] = [];
   const updatedItems = items.map((item) => {
-    const rawLivePrice = priceLookup.get(item.slug)?.get(item.weightLabel);
+    const rawLivePrice = priceLookup
+      .get(item.slug)
+      ?.get(item.weightLabel.trim());
     // Treat a 0 / negative / non-finite live price as "no valid price" and
     // keep the existing one. Without this, `0 ?? old` is 0 (nullish only
     // catches null/undefined) — a misconfigured/zeroed Sanity price would
@@ -132,4 +138,34 @@ export async function refreshCartPrices(
   });
 
   return { updatedItems, changed };
+}
+
+/**
+ * Apply refreshed PRICES onto the CURRENT store items, matched by line
+ * id. The refresh runs async (~100-500ms); if the customer edited the
+ * cart meanwhile, blindly replacing the store with the stale snapshot
+ * would undo their edits (quantity changes, removed/added lines). This
+ * merge keeps the live items as the source of truth and only carries
+ * over the refreshed unitPrice / wholesalePerKg.
+ */
+export function mergeRefreshedPrices(
+  current: CartItem[],
+  refreshed: CartItem[],
+): CartItem[] {
+  const byId = new Map(refreshed.map((i) => [i.id, i]));
+  return current.map((item) => {
+    const upd = byId.get(item.id);
+    if (!upd) return item;
+    if (
+      upd.unitPrice === item.unitPrice &&
+      (upd.wholesalePerKg ?? null) === (item.wholesalePerKg ?? null)
+    ) {
+      return item;
+    }
+    return {
+      ...item,
+      unitPrice: upd.unitPrice,
+      wholesalePerKg: upd.wholesalePerKg,
+    };
+  });
 }

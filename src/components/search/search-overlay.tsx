@@ -54,15 +54,20 @@ export function SearchOverlay() {
   // reuse the cache to avoid a network call on every open.
   const [products, setProducts] = useState<Product[]>([]);
   const lastFetchRef = useRef(0);
+  const fetchingRef = useRef(false);
   const FRESH_MS = 2 * 60 * 1000;
   useEffect(() => {
-    if (!open) return;
-    const now = Date.now();
-    if (products.length > 0 && now - lastFetchRef.current < FRESH_MS) return;
-    lastFetchRef.current = now;
+    if (!open || fetchingRef.current) return;
+    // Stamp freshness only AFTER the fetch RESOLVES (in .then) — stamping
+    // up-front marks data as fresh even when the request fails slowly or
+    // lands after the overlay closed, hiding newly published products for
+    // a whole TTL window. fetchingRef prevents parallel duplicates.
+    if (products.length > 0 && Date.now() - lastFetchRef.current < FRESH_MS)
+      return;
+    fetchingRef.current = true;
     sanityClient
       .fetch<SanityProduct[]>(PRODUCTS_QUERY)
-      .then((raw) =>
+      .then((raw) => {
         setProducts(
           raw
             .map(adaptProduct)
@@ -70,12 +75,15 @@ export function SearchOverlay() {
             // surface with an `Infinity` starting price and a broken
             // result row. Same guard the catalog/card paths now apply.
             .filter((p) => p.weights && p.weights.length > 0),
-        ),
-      )
+        );
+        lastFetchRef.current = Date.now();
+      })
       .catch(() => {
-        // Search just stays empty on a fetch failure — no crash. Reset
-        // the stamp so the next open retries.
-        lastFetchRef.current = 0;
+        // Search just stays empty on a fetch failure — no crash; the
+        // stamp stays stale so the next open retries.
+      })
+      .finally(() => {
+        fetchingRef.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

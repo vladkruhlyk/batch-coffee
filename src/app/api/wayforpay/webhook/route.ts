@@ -19,12 +19,15 @@ export async function POST(req: NextRequest) {
   // `text/plain`, not `application/json`. We can't rely on the header,
   // so we read the body as raw text and try JSON first (which is what
   // they actually send), falling back to form-urlencoded for the rare
-  // alternate integration mode. Logging the raw body on signature
-  // failure makes the next debugging round-trip much shorter.
-  let raw = "";
+  // alternate integration mode.
+  //
+  // PCI note: the payload carries cardPan/authCode — NEVER log the raw
+  // body or full field values. Failures log only the orderReference,
+  // failure category, and field names, which is enough to debug the
+  // shape without persisting cardholder data in Vercel logs.
   let body: Record<string, unknown> = {};
   try {
-    raw = await req.text();
+    const raw = await req.text();
     const trimmed = raw.trim();
     if (trimmed.startsWith("{")) {
       body = JSON.parse(trimmed) as Record<string, unknown>;
@@ -33,9 +36,12 @@ export async function POST(req: NextRequest) {
       body = Object.fromEntries(params.entries());
     }
   } catch (e) {
-    console.error("wayforpay/webhook parse failed:", e, "raw:", raw);
+    console.error(
+      "wayforpay/webhook parse failed:",
+      e instanceof Error ? e.message : "unknown",
+    );
     return NextResponse.json(
-      { error: "could not parse body", detail: String(e) },
+      { error: "could not parse body" },
       { status: 400 },
     );
   }
@@ -50,10 +56,10 @@ export async function POST(req: NextRequest) {
     console.error(
       "wayforpay/webhook rejected:",
       detail,
+      "ref:",
+      typeof body.orderReference === "string" ? body.orderReference : "?",
       "body keys:",
       Object.keys(body),
-      "raw:",
-      raw.slice(0, 500),
     );
     return NextResponse.json({ error: detail }, { status: 400 });
   }

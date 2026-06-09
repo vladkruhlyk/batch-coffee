@@ -23,6 +23,9 @@ export async function resolvePromoRule(
   rawCode: string | null | undefined,
 ): Promise<PromoRule | null> {
   if (!rawCode || typeof rawCode !== "string") return null;
+  // Cap defensively — callers validate, but this is the last gate before
+  // the value is interpolated as a GROQ $param.
+  if (rawCode.length > 50) return null;
   const code = rawCode.trim().toUpperCase();
   if (!code) return null;
   // freshClient bypasses Sanity's CDN so a disabled/expired code stops

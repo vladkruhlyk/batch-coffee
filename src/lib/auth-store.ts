@@ -474,7 +474,19 @@ export const useAuth = create<AuthState>()(
           }));
           return false;
         }
-        if (phone && !/^\+\d{7,15}$/.test(phone)) {
+        // Phone is REQUIRED. Upserting `phone: null` would leave
+        // needsProfile true forever — the user submits onboarding, the
+        // store recomputes needsProfile on the next sync, and they're
+        // bounced straight back to the same form: an infinite loop.
+        // Surface the problem here instead of silently persisting it.
+        if (!phone) {
+          set((s) => ({
+            error: "Введи номер телефону.",
+            errorBump: s.errorBump + 1,
+          }));
+          return false;
+        }
+        if (!/^\+\d{7,15}$/.test(phone)) {
           set((s) => ({
             error: "Введи номер у міжнародному форматі — починаючи з «+».",
             errorBump: s.errorBump + 1,
@@ -500,7 +512,7 @@ export const useAuth = create<AuthState>()(
             id: current.id,
             first_name: firstName,
             last_name: lastName,
-            phone: phone ? phone.replace(/^\+/, "") : null,
+            phone: phone.replace(/^\+/, ""),
             email: current.email ?? null,
           },
           { onConflict: "id" },
@@ -536,12 +548,16 @@ export const useAuth = create<AuthState>()(
           // email logins create real Supabase sessions, so a logged-in
           // user always has one here.)
           //
-          // BUT only when the auth flow is idle — never mid-OTP. The
-          // verifyOtp round-trip briefly has no session yet; if a parallel
-          // sync (rehydrate / cross-tab) fired right then it would wipe the
-          // user and bounce them back to the code screen.
-          if (get().user && get().step === "idle") {
-            set({ user: null });
+          // Gate on user presence, NOT on flow step. During a fresh OTP
+          // verification `user` is still null (it's set only after
+          // verifyOtp succeeds), so this can't bounce someone mid-login.
+          // But a LOGGED-IN user whose session was revoked server-side
+          // must be cleared regardless of what step the flow is in —
+          // gating on step === "idle" left revoked/deleted accounts
+          // with a working cabinet UI whenever the step was anything
+          // else. Fail closed: wipe the mirror and reset the flow.
+          if (get().user) {
+            set({ user: null, step: "idle", pendingPhone: null, pendingEmail: null });
           }
           return;
         }

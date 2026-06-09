@@ -54,7 +54,26 @@ interface CreateOrderBody {
    *  discount from this so the client can't grant itself an arbitrary
    *  one. */
   promoCode?: string | null;
+  /** Client-generated random key, stable across retries of the SAME
+   *  order intent. A replayed request returns the original order
+   *  instead of inserting a duplicate (unique index, migration 0009). */
+  idempotencyKey?: string | null;
 }
+
+/** Per-field caps. DB columns are unbounded `text`, so without these a
+ *  tampered client could push megabyte strings into every order row
+ *  (request-amplification + bloated backups). Generous for real data. */
+const MAX_LEN = {
+  name: 100,
+  phone: 32,
+  email: 200,
+  address: 500,
+  city: 120,
+  comment: 2000,
+  promo: 50,
+  itemString: 300,
+  thumb: 2000,
+} as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,6 +92,18 @@ export async function POST(req: NextRequest) {
         { error: "required fields missing" },
         { status: 400 },
       );
+    }
+    if (
+      body.recipientFirstName.length > MAX_LEN.name ||
+      body.recipientLastName.length > MAX_LEN.name ||
+      body.recipientPhone.length > MAX_LEN.phone ||
+      (body.recipientEmail?.length ?? 0) > MAX_LEN.email ||
+      (body.deliveryAddress?.length ?? 0) > MAX_LEN.address ||
+      (body.deliveryCity?.length ?? 0) > MAX_LEN.city ||
+      (body.comment?.length ?? 0) > MAX_LEN.comment ||
+      (body.promoCode?.length ?? 0) > MAX_LEN.promo
+    ) {
+      return NextResponse.json({ error: "field too long" }, { status: 400 });
     }
 
     // Bounds on items so a tampered client can't blow up the DB or
@@ -117,6 +148,19 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      if (
+        it.productSlug.length > MAX_LEN.itemString ||
+        it.productName.length > MAX_LEN.itemString ||
+        it.weightLabel.length > MAX_LEN.itemString ||
+        (it.roast?.length ?? 0) > MAX_LEN.itemString ||
+        (it.grind?.length ?? 0) > MAX_LEN.itemString ||
+        (it.thumb?.length ?? 0) > MAX_LEN.thumb
+      ) {
+        return NextResponse.json(
+          { error: "item field too long" },
+          { status: 400 },
+        );
+      }
     }
     if (!body.deliveryAddress?.trim()) {
       return NextResponse.json(
@@ -145,6 +189,34 @@ export async function POST(req: NextRequest) {
     } = await supabaseAuth.auth.getUser();
     const userId = user?.id ?? null;
     const supabase = createSupabaseAdminClient();
+
+    // Idempotency: the client sends a random key that stays the same
+    // across retries of one order intent. If we already created an order
+    // for this key (network retry, double-click, reload mid-submit),
+    // return THAT order instead of inserting a duplicate — duplicate
+    // orders mean duplicate charges.
+    const idemKey =
+      typeof body.idempotencyKey === "string" &&
+      /^[A-Za-z0-9-]{8,64}$/.test(body.idempotencyKey)
+        ? body.idempotencyKey
+        : null;
+    if (idemKey) {
+      const { data: existing } = await supabase
+        .from("orders")
+        .select("id, number, view_token")
+        .eq("idempotency_key", idemKey)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({
+          id: existing.id,
+          number: existing.number as string,
+          viewToken: existing.view_token as string,
+          replayed: true,
+        });
+      }
+      // A lookup error here is non-fatal (e.g. column missing before
+      // migration 0009 runs) — we fall through to a normal insert.
+    }
 
     // Price the order SERVER-SIDE from Sanity — never trust the client's
     // unit prices. resolveOrderPricing re-fetches each line by slug +
@@ -186,26 +258,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: order, error: orderErr } = await supabase
-      .from("orders")
-      .insert({
-        user_id: userId,
-        subtotal,
-        delivery_fee: body.deliveryFee,
-        discount,
-        total,
-        delivery_method: body.deliveryMethod,
-        delivery_address: body.deliveryAddress,
-        delivery_city: body.deliveryCity,
-        payment_method: body.paymentMethod,
-        recipient_first_name: body.recipientFirstName.trim(),
-        recipient_last_name: body.recipientLastName.trim(),
-        recipient_phone: body.recipientPhone.trim(),
-        recipient_email: body.recipientEmail,
-        comment: body.comment,
-      })
-      .select("id, number, view_token")
-      .single();
+    const orderRow = {
+      user_id: userId,
+      subtotal,
+      delivery_fee: body.deliveryFee,
+      discount,
+      total,
+      delivery_method: body.deliveryMethod,
+      delivery_address: body.deliveryAddress,
+      delivery_city: body.deliveryCity,
+      payment_method: body.paymentMethod,
+      recipient_first_name: body.recipientFirstName.trim(),
+      recipient_last_name: body.recipientLastName.trim(),
+      recipient_phone: body.recipientPhone.trim(),
+      recipient_email: body.recipientEmail,
+      comment: body.comment,
+    };
+
+    const insertOrder = (withKey: boolean) =>
+      withKey && idemKey
+        ? supabase
+            .from("orders")
+            .insert({ ...orderRow, idempotency_key: idemKey })
+            .select("id, number, view_token")
+            .single()
+        : supabase
+            .from("orders")
+            .insert(orderRow)
+            .select("id, number, view_token")
+            .single();
+
+    let { data: order, error: orderErr } = await insertOrder(true);
+
+    // 23505 = unique violation on the idempotency index: a concurrent
+    // retry won the race. Return ITS order — same contract as the
+    // pre-check replay above.
+    if (orderErr?.code === "23505" && idemKey) {
+      const { data: existing } = await supabase
+        .from("orders")
+        .select("id, number, view_token")
+        .eq("idempotency_key", idemKey)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({
+          id: existing.id,
+          number: existing.number as string,
+          viewToken: existing.view_token as string,
+          replayed: true,
+        });
+      }
+    }
+
+    // 42703 = the idempotency_key column doesn't exist yet (migration
+    // 0009 not applied). Degrade gracefully: insert without the key so
+    // order creation keeps working; dedup protection kicks in once the
+    // migration runs.
+    if (orderErr?.code === "42703" && idemKey) {
+      ({ data: order, error: orderErr } = await insertOrder(false));
+    }
+
     if (orderErr || !order) {
       console.error("orders/create insert failed:", orderErr);
       return NextResponse.json(
@@ -244,13 +355,23 @@ export async function POST(req: NextRequest) {
       // statements here, so we compensate manually) before returning the
       // error, so a client retry creates exactly one clean order.
       console.error("orders/create items insert failed:", itemsErr);
-      const { error: rollbackErr } = await supabase
+      let { error: rollbackErr } = await supabase
         .from("orders")
         .delete()
         .eq("id", order.id);
       if (rollbackErr) {
+        // One retry — a transient blip here would otherwise strand an
+        // orphan order (and pin its idempotency key, blocking the
+        // customer's retry).
+        ({ error: rollbackErr } = await supabase
+          .from("orders")
+          .delete()
+          .eq("id", order.id));
+      }
+      if (rollbackErr) {
         console.error(
-          "orders/create rollback (delete orphan order) failed:",
+          "ALERT orders/create ORPHAN ORDER — rollback failed twice, manual cleanup needed:",
+          order.id,
           rollbackErr,
         );
       }

@@ -16,6 +16,7 @@ import {
   type EffectiveCartItem,
 } from "@/lib/cart-store";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
+import { discountFromSnapshot } from "@/lib/promo";
 
 /**
  * Cart drawer — slide-over sheet from the right edge.
@@ -73,6 +74,13 @@ export function CartDrawer() {
 
   const subtotal = getCartSubtotal(items);
   const effectiveItems = getEffectiveItems(items);
+  // Free-shipping progress must account for an applied promo — the cart
+  // page computes eligibility on (subtotal − discount), so the drawer
+  // showing progress on the raw subtotal would contradict it ("безкоштовна
+  // доставка!" in the drawer, then a delivery fee on /cart).
+  const promo = useCart((s) => s.promo);
+  const discountedSubtotal =
+    subtotal - discountFromSnapshot(promo, subtotal);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
   const isEmpty = items.length === 0;
 
@@ -157,7 +165,7 @@ export function CartDrawer() {
                 {/* Free-shipping nudge — compact strip so the drawer's
                     vertical real estate stays focused on the CTA. */}
                 <FreeShippingProgress
-                  amount={subtotal}
+                  amount={discountedSubtotal}
                   variant="compact"
                   className="mb-5"
                 />

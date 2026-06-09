@@ -88,8 +88,11 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const currentKg = (activeWeight.grams * quantity) / 1000;
   const wholesaleActive =
     wholesalePerKg !== null && currentKg >= WHOLESALE_MIN_KG;
+  // Round PER UNIT then multiply — identical to getEffectiveItems in the
+  // cart store (and the product card), so the PDP headline price always
+  // equals what the cart/checkout will show for the same selection.
   const wholesaleTotal = wholesaleActive
-    ? Math.round(wholesalePerKg! * currentKg)
+    ? Math.round(wholesalePerKg! * (activeWeight.grams / 1000)) * quantity
     : null;
   const totalPrice = wholesaleTotal ?? retailTotal;
   const wholesaleSavings = wholesaleTotal ? retailTotal - wholesaleTotal : 0;

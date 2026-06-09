@@ -130,6 +130,27 @@ export async function handleWayForPayCallback(
     }
   }
 
+  // A refund must move the order out of "paid" — otherwise the customer
+  // (and admin) keep seeing "Оплачено" on a refunded order and reporting
+  // diverges from reality. The order_status enum has no `refunded`
+  // member, so we map to `cancelled` (closest customer-facing truth);
+  // the payments row keeps the precise `refunded` status for accounting.
+  // Guarded `.eq("status", "paid")` so a refund webhook can't clobber a
+  // later fulfilment state and stays idempotent across retries.
+  if (nextStatus === "refunded") {
+    const { error: refundErr } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", payment.order_id)
+      .eq("status", "paid");
+    if (refundErr) {
+      return {
+        ack: null,
+        detail: `order refund update failed: ${refundErr.message}`,
+      };
+    }
+  }
+
   // Acknowledge — without this, WayForPay keeps retrying for ~24h.
   const ack = buildWebhookAck(wayforpayMerchantSecret, {
     orderReference,

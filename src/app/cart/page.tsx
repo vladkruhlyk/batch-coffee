@@ -16,7 +16,10 @@ import {
   type EffectiveCartItem,
 } from "@/lib/cart-store";
 import { discountFromSnapshot, type PromoSnapshot } from "@/lib/promo";
-import { refreshCartPrices } from "@/lib/refresh-cart-prices";
+import {
+  mergeRefreshedPrices,
+  refreshCartPrices,
+} from "@/lib/refresh-cart-prices";
 import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
 import { EASING } from "@/lib/easing";
@@ -58,10 +61,18 @@ export default function CartPage() {
     refreshedRef.current = true;
     refreshCartPrices(items)
       .then(({ updatedItems, changed }) => {
-        if (changed.length > 0) replaceItems(updatedItems);
+        if (changed.length === 0) return;
+        // Merge by id against the LIVE store — the user may have edited
+        // quantities / removed lines while the fetch was in flight, and a
+        // blind replace would silently undo those edits.
+        replaceItems(
+          mergeRefreshedPrices(useCart.getState().items, updatedItems),
+        );
       })
-      .catch(() => {
-        /* stale prices are the fallback — no crash */
+      .catch((err) => {
+        // Stale prices are the fallback — no crash, but do leave a trace
+        // so Sanity outages are visible in logs.
+        console.error("cart price refresh failed:", err);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

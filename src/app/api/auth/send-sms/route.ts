@@ -107,6 +107,15 @@ function verifySignature(
   const sigHeader = headers.get("webhook-signature");
   if (!id || !timestamp || !sigHeader) return false;
 
+  // Replay protection (Standard Webhooks spec): the timestamp is part of
+  // the signed payload, so verifying the signature alone still accepts a
+  // CAPTURED request forever — re-triggering SMS sends on every replay.
+  // Reject anything outside a ±5 minute window.
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts)) return false;
+  const skewSeconds = Math.abs(Date.now() / 1000 - ts);
+  if (skewSeconds > 300) return false;
+
   // Supabase shows the secret as `v1,whsec_…`. Some panels paste it
   // with one prefix or the other. Accept both, then base64-decode
   // the remaining material to a Buffer for the HMAC key.

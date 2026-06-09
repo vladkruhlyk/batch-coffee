@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 /**
  * First-visit splash loader.
@@ -74,15 +75,17 @@ export function LoaderOverlay() {
   const show = shouldShow && !dismissed;
   const [frame, setFrame] = useState(FIRST_FRAME);
 
+  // Lock body scroll while the splash is up — via the SAME ref-counted
+  // hook the cart drawer + search overlay use. Direct body.overflow
+  // writes here used to race those overlays' locks (whoever restored
+  // last won, unlocking scroll behind a still-open modal).
+  useBodyScrollLock(show);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     // Already-shown shortcut handled by the initializer above; here
     // we just bail without animating.
     if (!show) return;
-
-    // Lock body scroll while splash is up.
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     let current = FIRST_FRAME;
     const tick = setInterval(() => {
@@ -101,18 +104,7 @@ export function LoaderOverlay() {
       setFrame(current);
     }, FRAME_INTERVAL_MS);
 
-    return () => {
-      clearInterval(tick);
-      // Restore whatever overflow was set before the splash locked it.
-      // This runs the moment `show` flips false (splash dismissed). We
-      // deliberately do NOT also reset overflow on a delayed timer —
-      // that older approach unconditionally set overflow="" after the
-      // fade, which clobbered the cart-drawer / search-overlay scroll
-      // lock if either opened during the fade window. The fixed,
-      // full-screen splash covers the page during its fade-out, so
-      // restoring scroll immediately here is invisible and safe.
-      document.body.style.overflow = prevOverflow;
-    };
+    return () => clearInterval(tick);
   }, [show]);
 
   return (

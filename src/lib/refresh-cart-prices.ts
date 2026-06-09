@@ -30,6 +30,7 @@ interface SanityWeight {
   grams: number;
   label: string;
   price: number;
+  wholesalePrice?: number;
 }
 
 interface ProductPriceRow {
@@ -61,13 +62,18 @@ export async function refreshCartPrices(
   const rows = await sanityClient.fetch<ProductPriceRow[]>(
     `*[_type == "product" && slug.current in $slugs]{
       "slug": slug.current,
-      weights
+      weights[]{ label, grams, price, wholesalePrice }
     }`,
     { slugs },
   );
 
   // slug → weightLabel → currentPrice; plus wholesale per-kg (derived
-  // from the 1kg variant if any).
+  // from the 1kg variant if any). Mirrors getWholesalePerKg in
+  // lib/wholesale.ts exactly: prefer the explicit wholesalePrice the
+  // roaster set on the 1kg variant, fall back to the −15% computation
+  // only when it's absent. Guard against a 0/invalid retail price so a
+  // misconfigured Sanity doc can't yield a 0 wholesale rate (which
+  // would flow into a 0-revenue order line).
   const priceLookup = new Map<string, Map<string, number>>();
   const wholesaleLookup = new Map<string, number | null>();
   for (const row of rows) {
@@ -76,9 +82,17 @@ export async function refreshCartPrices(
     for (const w of row.weights ?? []) {
       weights.set(w.label, w.price);
       if (w.grams === 1000) {
-        wholesalePerKg = Math.round(
-          w.price * (1 - WHOLESALE_DISCOUNT_PERCENT / 100),
-        );
+        if (w.wholesalePrice && w.wholesalePrice > 0) {
+          wholesalePerKg = Math.round(w.wholesalePrice);
+        } else if (w.price > 0) {
+          wholesalePerKg = Math.round(
+            w.price * (1 - WHOLESALE_DISCOUNT_PERCENT / 100),
+          );
+        }
+        // else leave null — no valid rate to apply.
+        if (wholesalePerKg !== null && wholesalePerKg <= 0) {
+          wholesalePerKg = null;
+        }
       }
     }
     priceLookup.set(row.slug, weights);

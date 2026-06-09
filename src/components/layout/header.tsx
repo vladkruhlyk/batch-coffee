@@ -2,7 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useMotionValueEvent, useScroll } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValueEvent,
+  useScroll,
+} from "framer-motion";
 import { useState } from "react";
 import { User, Menu, X } from "lucide-react";
 import { CartIconButton } from "@/components/cart/cart-icon-button";
@@ -133,8 +138,11 @@ export function Header({ overlay = false }: HeaderProps) {
         </Container>
       </motion.header>
 
-      {/* Mobile menu */}
-      {mobileOpen && (
+      {/* Mobile menu. Wrapped in AnimatePresence so the `exit` opacity
+          fade actually plays on close — without it the menu unmounts
+          instantly. */}
+      <AnimatePresence>
+        {mobileOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -213,7 +221,8 @@ export function Header({ overlay = false }: HeaderProps) {
             </nav>
           </Container>
         </motion.div>
-      )}
+        )}
+      </AnimatePresence>
     </>
   );
 }

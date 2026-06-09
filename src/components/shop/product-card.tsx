@@ -42,7 +42,11 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const addToCart = useAddToCart();
 
+  // A product with no weight variants is misconfigured (the Sanity
+  // schema requires ≥1, but a draft / bad import could slip through).
+  // Bail before we index into an empty array and crash the whole grid.
   const weight = product.weights[weightIndex];
+  if (!weight) return null;
   const roast = product.roasts?.[roastIndex];
   const hasRoasts = (product.roasts?.length ?? 0) > 0;
 

@@ -126,8 +126,27 @@ export async function POST(req: NextRequest) {
       (s, i) => s + i.unitPrice * i.quantity,
       0,
     );
+
+    // Validate discount the same way the other money fields are
+    // validated above. Without this a tampered client could send a
+    // huge or NaN discount and drive `total` negative / NaN into the
+    // DB (the orders table has no CHECK on total).
     const discount = body.discount ?? 0;
+    if (
+      !Number.isFinite(discount) ||
+      discount < 0 ||
+      discount > subtotal + body.deliveryFee
+    ) {
+      return NextResponse.json({ error: "invalid discount" }, { status: 400 });
+    }
+
     const total = subtotal + body.deliveryFee - discount;
+    if (!Number.isFinite(total) || total <= 0) {
+      return NextResponse.json(
+        { error: "order total must be positive" },
+        { status: 400 },
+      );
+    }
 
     const { data: order, error: orderErr } = await supabase
       .from("orders")

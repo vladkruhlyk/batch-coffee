@@ -55,6 +55,28 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const addToCart = useAddToCart();
 
   const activeWeight = product.weights[weightIndex];
+  // Defensive: a product with no weight variants is misconfigured.
+  // All hooks above ran unconditionally, so this early return is safe
+  // w.r.t. rules-of-hooks. Show a graceful "unavailable" state instead
+  // of crashing on `activeWeight.price`.
+  if (!activeWeight) {
+    return (
+      <Container size="default" className="pt-28 lg:pt-36 pb-24 text-center">
+        <h1 className="font-display text-3xl font-semibold tracking-[-0.025em]">
+          {product.name}
+        </h1>
+        <p className="mt-3 text-[var(--color-text-secondary)]">
+          Цей товар тимчасово недоступний.
+        </p>
+        <Link
+          href="/shop"
+          className="mt-7 inline-flex items-center gap-2 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] px-7 py-3.5 text-sm tracking-[0.12em] uppercase hover:opacity-85 transition-opacity"
+        >
+          У каталог
+        </Link>
+      </Container>
+    );
+  }
   const activeRoast = product.roasts?.[roastIndex];
   const hasRoasts = (product.roasts?.length ?? 0) > 0;
   const retailTotal = activeWeight.price * quantity;

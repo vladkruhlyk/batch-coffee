@@ -94,8 +94,11 @@ export async function handleWayForPayCallback(
         : "declined";
 
   // Update the payment row regardless — even a duplicate webhook gets
-  // its raw payload refreshed.
-  await supabase
+  // its raw payload refreshed. CHECK THE ERROR: if this write fails we
+  // must NOT ack, or WayForPay considers the payment settled while our
+  // DB never recorded it. A null ack makes the route respond 400 →
+  // WayForPay retries (it retries for ~24h).
+  const { error: payErr } = await supabase
     .from("payments")
     .update({
       status: nextStatus,
@@ -104,14 +107,27 @@ export async function handleWayForPayCallback(
         nextStatus === "approved" ? null : reason || transactionStatus,
     })
     .eq("id", payment.id);
+  if (payErr) {
+    return { ack: null, detail: `payment update failed: ${payErr.message}` };
+  }
 
-  // Move the order forward — but only on the FIRST approval to keep
-  // this idempotent. status_events trigger will log the transition.
-  if (nextStatus === "approved" && payment.status !== "approved") {
-    await supabase
+  // Move the order to paid on approval. Conditional `.neq("status",
+  // "paid")` makes this atomic + idempotent against concurrent/retried
+  // deliveries (no double status_events) AND lets a retry complete the
+  // order update if a prior delivery's payment write landed but this
+  // step failed. We DON'T gate on the stale payment.status read — that
+  // would skip the order update on retry and strand the order in
+  // `pending`. If the order update errors, we don't ack so WayForPay
+  // retries.
+  if (nextStatus === "approved") {
+    const { error: orderErr } = await supabase
       .from("orders")
       .update({ status: "paid" })
-      .eq("id", payment.order_id);
+      .eq("id", payment.order_id)
+      .neq("status", "paid");
+    if (orderErr) {
+      return { ack: null, detail: `order update failed: ${orderErr.message}` };
+    }
   }
 
   // Acknowledge — without this, WayForPay keeps retrying for ~24h.

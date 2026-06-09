@@ -57,7 +57,16 @@ export function SearchOverlay() {
     fetchedRef.current = true;
     sanityClient
       .fetch<SanityProduct[]>(PRODUCTS_QUERY)
-      .then((raw) => setProducts(raw.map(adaptProduct)))
+      .then((raw) =>
+        setProducts(
+          raw
+            .map(adaptProduct)
+            // Drop misconfigured products with no weights — they'd
+            // surface with an `Infinity` starting price and a broken
+            // result row. Same guard the catalog/card paths now apply.
+            .filter((p) => p.weights && p.weights.length > 0),
+        ),
+      )
       .catch(() => {
         // Search just stays empty on a fetch failure — no crash.
         fetchedRef.current = false;

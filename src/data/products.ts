@@ -773,7 +773,10 @@ export function getBestsellers(limit = 6): Product[] {
   ).slice(0, limit);
 }
 
-/** Lowest price across weights — for display "від 340 ₴" if we ever need it. */
+/** Lowest price across weights — for display "від 340 ₴" if we ever need it.
+ *  Returns 0 for a weightless product instead of `Math.min()`'s `Infinity`,
+ *  which would otherwise poison price sorting + the catalog filter range. */
 export function getStartingPrice(product: Product): number {
+  if (!product.weights || product.weights.length === 0) return 0;
   return Math.min(...product.weights.map((w) => w.price));
 }

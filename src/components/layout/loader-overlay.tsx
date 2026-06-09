@@ -97,18 +97,16 @@ export function LoaderOverlay() {
 
     return () => {
       clearInterval(tick);
+      // Restore whatever overflow was set before the splash locked it.
+      // This runs the moment `show` flips false (splash dismissed). We
+      // deliberately do NOT also reset overflow on a delayed timer —
+      // that older approach unconditionally set overflow="" after the
+      // fade, which clobbered the cart-drawer / search-overlay scroll
+      // lock if either opened during the fade window. The fixed,
+      // full-screen splash covers the page during its fade-out, so
+      // restoring scroll immediately here is invisible and safe.
       document.body.style.overflow = prevOverflow;
     };
-  }, [show]);
-
-  // Restore body scroll once the exit animation finishes.
-  useEffect(() => {
-    if (!show) {
-      const t = window.setTimeout(() => {
-        document.body.style.overflow = "";
-      }, FADE_OUT_MS);
-      return () => window.clearTimeout(t);
-    }
   }, [show]);
 
   return (

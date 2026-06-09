@@ -488,13 +488,19 @@ export const useAuth = create<AuthState>()(
         // affect 0 rows and the name would never save. Upsert creates
         // the row when absent and updates it when present — onboarding
         // can't fail just because the trigger didn't fire.
+        // Store the phone WITHOUT the leading "+" — that's the invariant
+        // Supabase (auth.users.phone) and the on_auth_user_created
+        // trigger use, and every read path re-adds it via ensurePlus.
+        // Writing "+380…" here would diverge profiles.phone from
+        // auth.users.phone and break any server function / direct query
+        // that assumes the bare-digits format.
         const supabase = createSupabaseBrowserClient();
         const { error } = await supabase.from("profiles").upsert(
           {
             id: current.id,
             first_name: firstName,
             last_name: lastName,
-            phone: phone || null,
+            phone: phone ? phone.replace(/^\+/, "") : null,
             email: current.email ?? null,
           },
           { onConflict: "id" },

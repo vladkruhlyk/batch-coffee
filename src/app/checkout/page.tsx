@@ -10,7 +10,7 @@ import { Footer } from "@/components/layout/footer";
 import { useCart, getCartSubtotal, getEffectiveItems } from "@/lib/cart-store";
 import { useAuth, formatPhone, normalizePhone } from "@/lib/auth-store";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
-import { computePromoDiscount } from "@/lib/promo";
+import { discountFromSnapshot } from "@/lib/promo";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -37,7 +37,7 @@ export default function CheckoutPage() {
   const items = useCart((s) => s.items);
   const clearCart = useCart((s) => s.clear);
   const replaceCartItems = useCart((s) => s.replaceItems);
-  const promoCode = useCart((s) => s.promoCode);
+  const promo = useCart((s) => s.promo);
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
 
@@ -131,9 +131,10 @@ export default function CheckoutPage() {
   const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   // Pickup is free; that's the only delivery method available right now.
   const deliveryFee = 0;
-  // Display-only discount. The server recomputes it from the promo code
-  // + its own subtotal, so this just keeps the summary honest.
-  const discount = computePromoDiscount(promoCode, subtotal);
+  // Display-only discount, from the stored snapshot. The server
+  // re-resolves the code from Sanity and recomputes the authoritative
+  // discount, so this just keeps the summary honest.
+  const discount = discountFromSnapshot(promo, subtotal);
   const total = subtotal + deliveryFee - discount;
 
   const canSubmit =
@@ -169,9 +170,10 @@ export default function CheckoutPage() {
           paymentMethod: payment,
           comment: comment.trim() || null,
           deliveryFee,
-          // Send only the CODE — the server recomputes the discount. A
-          // tampered client can't grant itself an arbitrary amount.
-          promoCode: promoCode ?? null,
+          // Send only the CODE — the server re-resolves it from Sanity
+          // and recomputes the discount. A tampered client can't grant
+          // itself an arbitrary amount.
+          promoCode: promo?.code ?? null,
           items: effectiveItems.map((it) => ({
             productSlug: it.slug,
             productName: it.name,
@@ -637,9 +639,9 @@ export default function CheckoutPage() {
                       Безкоштовно
                     </dd>
                   </div>
-                  {discount > 0 && (
+                  {discount > 0 && promo && (
                     <div className="flex justify-between text-emerald-700">
-                      <dt>Знижка ({promoCode})</dt>
+                      <dt>Знижка ({promo.code})</dt>
                       <dd className="tabular-nums">−{formatPrice(discount)}</dd>
                     </div>
                   )}

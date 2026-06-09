@@ -3,7 +3,7 @@ import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
-import { computePromoDiscount } from "@/lib/promo";
+import { resolveOrderDiscount } from "@/lib/promo-server";
 
 /**
  * POST /api/orders/create
@@ -153,11 +153,16 @@ export async function POST(req: NextRequest) {
       0,
     );
 
-    // Resolve the discount SERVER-SIDE from the promo code — never trust
-    // a client-sent amount. computePromoDiscount returns 0 for an
-    // unknown/empty code, and is bounded by `subtotal` by construction
-    // (it's a percentage of subtotal), so `total` can't go negative.
-    const discount = computePromoDiscount(body.promoCode ?? null, subtotal);
+    // Resolve the discount SERVER-SIDE from the promo code — re-fetch the
+    // rule from Sanity and re-validate (active / dates / min subtotal) so
+    // a tampered client can't grant itself a discount, and an expired or
+    // disabled code yields 0 (the order still goes through at full price).
+    // The result is clamped to [0, subtotal], so `total` can't go negative.
+    const discount = await resolveOrderDiscount(
+      body.promoCode ?? null,
+      subtotal,
+      new Date(),
+    );
 
     const total = subtotal + body.deliveryFee - discount;
     if (!Number.isFinite(total) || total <= 0) {

@@ -1,50 +1,58 @@
 /**
- * Promo codes — single source of truth, used both client-side (to show
- * the discount in the cart/checkout summary) and server-side (to compute
- * the AUTHORITATIVE discount that lands on the order).
+ * Shared promo types + the pure display-discount calculation.
  *
- * Security model: the client only ever transmits the promo *code*, never
- * a discount amount. The server (`/api/orders/create`) recomputes the
- * discount here from the code + server-side subtotal, so a tampered
- * client can't grant itself an arbitrary discount.
+ * Promo codes are managed in Sanity now (see schemaTypes/promoCode.ts).
+ * This module is the framework-agnostic, dependency-free core that both
+ * the client (cart/checkout summary preview) and the server (authoritative
+ * charge in api/orders/create) use, so the displayed discount and the
+ * charged discount are computed by the SAME function.
  *
- * To add / remove / disable a code, edit PROMO_CODES. A future
- * admin-managed system would replace this map with a Sanity/DB lookup
- * (with expiry, usage limits, per-product scoping) — the call sites
- * wouldn't change, only the body of `lookupPromo`.
+ * Security: the client stores only a "snapshot" of the applied code for
+ * preview. The server NEVER trusts it — it re-resolves the code from
+ * Sanity and re-evaluates validity + amount (see lib/promo-server.ts).
  */
 
-export interface PromoResult {
-  /** Normalised (upper-cased) code. */
+export type PromoDiscountType = "percent" | "fixed";
+
+/**
+ * The minimal, display-only view of an applied promo kept in the cart
+ * store. Enough to recompute the preview discount as the cart changes,
+ * without re-hitting the network on every edit.
+ */
+export interface PromoSnapshot {
   code: string;
-  /** Fractional discount, e.g. 0.10 for −10%. */
-  percent: number;
-}
-
-/** code → fractional discount. Codes are matched case-insensitively. */
-const PROMO_CODES: Record<string, number> = {
-  BATCH10: 0.1,
-};
-
-/** Resolve a raw user-typed code to a promo, or null if it doesn't exist. */
-export function lookupPromo(raw: string | null | undefined): PromoResult | null {
-  if (!raw) return null;
-  const code = raw.trim().toUpperCase();
-  const percent = PROMO_CODES[code];
-  return percent ? { code, percent } : null;
+  discountType: PromoDiscountType;
+  discountValue: number;
+  /** Min subtotal for the code to apply; null/absent = no minimum. */
+  minSubtotal?: number | null;
 }
 
 /**
- * Discount in integer UAH for a given code applied to `subtotal`.
- * Returns 0 for an unknown/empty code. Rounded once here so client
- * display and server charge agree to the hryvnia.
+ * Integer-UAH discount for a snapshot applied to `subtotal`. Pure — no
+ * date logic (validity windows are checked server-side at apply +
+ * checkout). Clamped to [0, subtotal] so a discount can never exceed the
+ * basket or go negative. Rounded once so preview and charge agree.
  */
-export function computePromoDiscount(
-  code: string | null | undefined,
+export function discountFromSnapshot(
+  promo: PromoSnapshot | null | undefined,
   subtotal: number,
 ): number {
-  const promo = lookupPromo(code);
   if (!promo) return 0;
   if (!Number.isFinite(subtotal) || subtotal <= 0) return 0;
-  return Math.round(subtotal * promo.percent);
+  if (
+    promo.minSubtotal != null &&
+    Number.isFinite(promo.minSubtotal) &&
+    subtotal < promo.minSubtotal
+  ) {
+    return 0;
+  }
+  if (!Number.isFinite(promo.discountValue) || promo.discountValue <= 0) {
+    return 0;
+  }
+  const raw =
+    promo.discountType === "percent"
+      ? subtotal * (promo.discountValue / 100)
+      : promo.discountValue;
+  const discount = Math.round(raw);
+  return Math.max(0, Math.min(discount, subtotal));
 }

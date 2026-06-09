@@ -47,6 +47,10 @@ export const structure: StructureResolver = (S) =>
             .defaultOrdering([{ field: "order", direction: "asc" }]),
         ),
       S.divider(),
+      S.listItem()
+        .title("Промокоди")
+        .child(S.documentTypeList("promoCode").title("Промокоди")),
+      S.divider(),
       // Singleton — single editable doc, not a list.
       S.listItem()
         .title("Налаштування сайту")

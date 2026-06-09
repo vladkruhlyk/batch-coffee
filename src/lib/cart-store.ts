@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/data/products";
 import { getWholesalePerKg, WHOLESALE_MIN_KG } from "./wholesale";
+import type { PromoSnapshot } from "./promo";
 
 /**
  * Cart store — Zustand + localStorage persistence.
@@ -60,11 +61,12 @@ interface CartState {
   open: boolean;
   /** Increments on every add — lets UI play a pulse animation on the badge. */
   lastAddBump: number;
-  /** Applied promo code (upper-cased), or null. Persisted so it survives
-   *  the trip from /cart to /checkout. The discount itself is never
-   *  stored — it's recomputed from the code (client for display, server
-   *  for the charge) so the two can't drift. */
-  promoCode: string | null;
+  /** Applied promo snapshot (code + type + value for preview), or null.
+   *  Persisted so it survives /cart → /checkout. The discount AMOUNT is
+   *  never stored — it's recomputed from the snapshot for display and
+   *  re-validated from Sanity on the server for the charge, so the two
+   *  can't drift and the client can't fake a discount. */
+  promo: PromoSnapshot | null;
   add: (product: Product, opts?: AddToCartInput) => void;
   remove: (id: string) => void;
   setQuantity: (id: string, n: number) => void;
@@ -73,7 +75,7 @@ interface CartState {
    *  price-refresh step so it can update line prices in one shot
    *  without having to remove+re-add. */
   replaceItems: (items: CartItem[]) => void;
-  setPromo: (code: string | null) => void;
+  setPromo: (promo: PromoSnapshot | null) => void;
   openCart: () => void;
   closeCart: () => void;
   toggleCart: () => void;
@@ -94,7 +96,7 @@ export const useCart = create<CartState>()(
       items: [],
       open: false,
       lastAddBump: 0,
-      promoCode: null,
+      promo: null,
 
       add: (product, opts = {}) => {
         const weightIndex = opts.weightIndex ?? 0;
@@ -148,12 +150,11 @@ export const useCart = create<CartState>()(
             .filter((i) => i.quantity > 0),
         })),
 
-      clear: () => set({ items: [], promoCode: null }),
+      clear: () => set({ items: [], promo: null }),
 
       replaceItems: (items) => set({ items }),
 
-      setPromo: (code) =>
-        set({ promoCode: code ? code.trim().toUpperCase() : null }),
+      setPromo: (promo) => set({ promo }),
 
       openCart: () => set({ open: true }),
       closeCart: () => set({ open: false }),
@@ -161,9 +162,21 @@ export const useCart = create<CartState>()(
     }),
     {
       name: "batch-cart",
+      version: 1,
+      // v0 persisted `promoCode: string`; v1 uses `promo: PromoSnapshot |
+      // null`. Drop the legacy key and never carry a non-object promo
+      // over, so an old cache can't hydrate `promo` into a bad shape.
+      migrate: (persisted, version) => {
+        const s = (persisted ?? {}) as Record<string, unknown>;
+        if (version < 1) {
+          delete s.promoCode;
+          if (typeof s.promo !== "object") s.promo = null;
+        }
+        return s;
+      },
       partialize: (state) => ({
         items: state.items,
-        promoCode: state.promoCode,
+        promo: state.promo,
       }),
     },
   ),

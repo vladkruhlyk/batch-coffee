@@ -50,6 +50,20 @@ export const PRODUCT_BY_SLUG_QUERY = `
   }
 `;
 
+/** Single promo code, matched case-insensitively. Returns the raw rule
+ *  fields; validity (active / dates / min) is checked in promo-server. */
+export const PROMO_CODE_BY_CODE_QUERY = `
+  *[_type == "promoCode" && upper(code) == $code][0]{
+    "code": upper(code),
+    discountType,
+    discountValue,
+    active,
+    startsAt,
+    expiresAt,
+    minSubtotal
+  }
+`;
+
 export const BANNERS_QUERY = `
   *[_type == "banner" && visible == true] | order(order asc) {
     _id,

@@ -15,7 +15,7 @@ import {
   getEffectiveItems,
   type EffectiveCartItem,
 } from "@/lib/cart-store";
-import { computePromoDiscount, lookupPromo } from "@/lib/promo";
+import { discountFromSnapshot, type PromoSnapshot } from "@/lib/promo";
 import { refreshCartPrices } from "@/lib/refresh-cart-prices";
 import { FREE_SHIPPING_THRESHOLD, DELIVERY_BASE } from "@/lib/shipping";
 import { formatPrice, cn } from "@/lib/utils";
@@ -30,9 +30,10 @@ import { EASING } from "@/lib/easing";
  * left, then summarise everything in a sticky right rail on desktop /
  * fixed bottom bar on mobile.
  *
- * Promo handling is local for now — accepts a single demo code `BATCH10`
- * for 10% off so the UX can be evaluated. When real promo codes ship
- * we'll proxy this to `/api/promo/validate`.
+ * Promo codes are managed in Sanity Studio. "Застосувати" POSTs the code
+ * to `/api/promo/validate`, which resolves + validates it server-side and
+ * returns a display snapshot we keep in the cart store. The real discount
+ * is re-validated independently at order creation.
  */
 export default function CartPage() {
   const items = useCart((s) => s.items);
@@ -41,11 +42,12 @@ export default function CartPage() {
   const replaceItems = useCart((s) => s.replaceItems);
   // Promo lives in the store now (persisted) so checkout can read it and
   // send the *code* to the server, which recomputes the authoritative
-  // discount. The input text + error stay local to this page.
-  const promoApplied = useCart((s) => s.promoCode);
+  // discount. The input text + error/loading stay local to this page.
+  const promo = useCart((s) => s.promo);
   const setPromo = useCart((s) => s.setPromo);
   const [promoInput, setPromoInput] = useState("");
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
   // Refresh prices against live Sanity on mount — without this, a
   // customer landing on /cart directly (not via checkout) sees the
@@ -68,20 +70,41 @@ export default function CartPage() {
   const effectiveItems = getEffectiveItems(items);
   const wholesaleActive = effectiveItems.some((i) => i.wholesaleActive);
   const count = getCartCount(items);
-  const discount = computePromoDiscount(promoApplied, subtotal);
+  const discount = discountFromSnapshot(promo, subtotal);
   const eligibleForFreeShipping = subtotal - discount >= FREE_SHIPPING_THRESHOLD;
   const shipping = eligibleForFreeShipping ? 0 : DELIVERY_BASE;
   const total = subtotal - discount + shipping;
 
-  const applyPromo = (e: React.FormEvent) => {
+  const applyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
-    const promo = lookupPromo(promoInput);
-    if (!promoInput.trim()) return;
-    if (promo) {
-      setPromo(promo.code);
-      setPromoError(null);
-    } else {
-      setPromoError("Цей промокод не діє. Перевір ще раз.");
+    const code = promoInput.trim();
+    if (!code || promoLoading) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      // Read the LIVE subtotal at request time (not the render-closure
+      // value), so editing the cart while the request is in flight
+      // validates against the real basket.
+      const liveSubtotal = getCartSubtotal(useCart.getState().items);
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, subtotal: liveSubtotal }),
+      });
+      const data = (await res.json()) as
+        | { ok: true; snapshot: PromoSnapshot }
+        | { ok: false; reason: string };
+      if (data.ok) {
+        setPromo(data.snapshot);
+        setPromoError(null);
+      } else {
+        setPromo(null);
+        setPromoError(data.reason || "Цей промокод не діє. Перевір ще раз.");
+      }
+    } catch {
+      setPromoError("Не вдалось перевірити промокод. Спробуй ще раз.");
+    } finally {
+      setPromoLoading(false);
     }
   };
 
@@ -186,16 +209,17 @@ export default function CartPage() {
                     >
                       <Tag className="h-3 w-3" /> Промокод
                     </label>
-                    {promoApplied ? (
+                    {promo ? (
                       <div className="flex items-center justify-between gap-3 rounded-full bg-[var(--color-bg-secondary)] px-4 py-2">
                         <span className="font-display text-sm font-medium">
-                          {promoApplied}
+                          {promo.code}
                         </span>
                         <button
                           type="button"
                           onClick={() => {
                             setPromo(null);
                             setPromoInput("");
+                            setPromoError(null);
                           }}
                           className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
                         >
@@ -212,14 +236,16 @@ export default function CartPage() {
                               setPromoInput(e.target.value);
                               if (promoError) setPromoError(null);
                             }}
-                            placeholder="BATCH10"
-                            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
+                            placeholder="Введи код"
+                            disabled={promoLoading}
+                            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)] disabled:opacity-60"
                           />
                           <button
                             type="submit"
-                            className="text-xs tracking-[0.12em] uppercase text-[var(--color-text-primary)] hover:opacity-70 transition-opacity"
+                            disabled={promoLoading || !promoInput.trim()}
+                            className="text-xs tracking-[0.12em] uppercase text-[var(--color-text-primary)] hover:opacity-70 transition-opacity disabled:opacity-40"
                           >
-                            Застосувати
+                            {promoLoading ? "..." : "Застосувати"}
                           </button>
                         </div>
                         {promoError && (
@@ -227,9 +253,6 @@ export default function CartPage() {
                             {promoError}
                           </p>
                         )}
-                        <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
-                          Демо: <span className="font-medium">BATCH10</span> — −10%
-                        </p>
                       </>
                     )}
                   </form>
@@ -242,9 +265,9 @@ export default function CartPage() {
                       </dt>
                       <dd className="tabular-nums">{formatPrice(subtotal)}</dd>
                     </div>
-                    {discount > 0 && (
+                    {discount > 0 && promo && (
                       <div className="flex items-center justify-between text-emerald-700">
-                        <dt>Знижка ({promoApplied})</dt>
+                        <dt>Знижка ({promo.code})</dt>
                         <dd className="tabular-nums">
                           −{formatPrice(discount)}
                         </dd>

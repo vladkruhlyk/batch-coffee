@@ -5,11 +5,20 @@ import { category } from "./category";
 import { brewGuide } from "./brewGuide";
 import { journalPost } from "./journalPost";
 import { siteSettings } from "./siteSettings";
+import { promoCode } from "./promoCode";
 
 /**
  * Registry of all schema types exposed to Sanity Studio. Add new schemas
  * here to surface them in the desk.
  */
 export const schema: { types: SchemaTypeDefinition[] } = {
-  types: [product, banner, category, brewGuide, journalPost, siteSettings],
+  types: [
+    product,
+    banner,
+    category,
+    brewGuide,
+    journalPost,
+    siteSettings,
+    promoCode,
+  ],
 };

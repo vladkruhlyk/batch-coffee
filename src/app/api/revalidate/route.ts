@@ -20,7 +20,7 @@ import { parseBody } from "next-sanity/webhook";
  *     URL:      https://<your-domain>/api/revalidate
  *     Dataset:  production
  *     Trigger on: Create, Update, Delete
- *     Filter:   _type in ["product","banner","category","brewGuide","journalPost","siteSettings"]
+ *     Filter:   _type in ["product","banner","category","brewGuide","journalPost","siteSettings","promoCode"]
  *     Projection: { "_type": _type, "slug": slug.current }
  *     Secret:   (paste the same value as SANITY_WEBHOOK_SECRET)
  */

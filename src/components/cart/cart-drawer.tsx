@@ -189,6 +189,16 @@ export function CartDrawer() {
                 >
                   Оформити замовлення
                 </Button>
+                {/* Secondary route to the full /cart page — promo entry,
+                    line-by-line editing. Without this link most customers
+                    would never land there (the CTA above skips it). */}
+                <Link
+                  href="/cart"
+                  onClick={closeCart}
+                  className="mt-3 block text-center text-[11px] tracking-[0.2em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
+                  Відкрити кошик повністю
+                </Link>
                 <div className="mt-4 flex items-center justify-between text-[11px] tracking-[0.2em] uppercase">
                   <button
                     type="button"

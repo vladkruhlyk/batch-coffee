@@ -41,6 +41,13 @@ export default function CheckoutPage() {
   const clearCart = useCart((s) => s.clear);
   const replaceCartItems = useCart((s) => s.replaceItems);
   const promo = useCart((s) => s.promo);
+  const setPromo = useCart((s) => s.setPromo);
+  // Promo input lives here too, not only on /cart — the cart drawer's CTA
+  // goes straight to /checkout, so for most customers this page is the
+  // only place they'd ever see a promo field.
+  const [promoInput, setPromoInput] = useState("");
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const user = useAuth((s) => s.user);
   const hydrated = useAuth((s) => s.hydrated);
 
@@ -184,6 +191,35 @@ export default function CheckoutPage() {
     normalizePhone(phone).length >= 8 &&
     agreed &&
     !submitting;
+
+  const applyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code || promoLoading) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const liveSubtotal = getCartSubtotal(useCart.getState().items);
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, subtotal: liveSubtotal }),
+      });
+      const data = (await res.json()) as
+        | { ok: true; snapshot: PromoSnapshot }
+        | { ok: false; reason: string };
+      if (data.ok) {
+        setPromo(data.snapshot);
+        setPromoInput("");
+      } else {
+        setPromo(null);
+        setPromoError(data.reason || "Цей промокод не діє. Перевір ще раз.");
+      }
+    } catch {
+      setPromoError("Не вдалось перевірити промокод. Спробуй ще раз.");
+    } finally {
+      setPromoLoading(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -675,6 +711,65 @@ export default function CheckoutPage() {
                     Гуртова ціна
                   </p>
                 )}
+
+                {/* Promo code. A <div>, not a nested <form> — this rail sits
+                    inside the main checkout form and nested forms are
+                    invalid HTML; Enter is handled on the input directly. */}
+                <div className="mt-5 pt-5 border-t border-[var(--color-border-default)]">
+                  <span className="text-[10px] tracking-[0.22em] uppercase text-[var(--color-text-muted)] block mb-2">
+                    Промокод
+                  </span>
+                  {promo ? (
+                    <div className="flex items-center justify-between gap-3 rounded-full bg-[var(--color-bg-secondary)] px-4 py-2">
+                      <span className="font-display text-sm font-medium">
+                        {promo.code}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPromo(null);
+                          setPromoInput("");
+                          setPromoError(null);
+                        }}
+                        className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                      >
+                        Прибрати
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 border-b border-[var(--color-border-strong)] focus-within:border-[var(--color-text-primary)] pb-2 transition-colors">
+                        <input
+                          value={promoInput}
+                          onChange={(e) => {
+                            setPromoInput(e.target.value);
+                            if (promoError) setPromoError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void applyPromo();
+                            }
+                          }}
+                          placeholder="Введи код"
+                          disabled={promoLoading}
+                          className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)] disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void applyPromo()}
+                          disabled={promoLoading || !promoInput.trim()}
+                          className="text-xs tracking-[0.12em] uppercase text-[var(--color-text-primary)] hover:opacity-70 transition-opacity disabled:opacity-40"
+                        >
+                          {promoLoading ? "..." : "Застосувати"}
+                        </button>
+                      </div>
+                      {promoError && (
+                        <p className="mt-2 text-xs text-rose-700">{promoError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 <dl className="mt-5 pt-5 border-t border-[var(--color-border-default)] flex flex-col gap-2 text-sm">
                   <div className="flex justify-between">

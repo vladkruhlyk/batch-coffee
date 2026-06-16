@@ -619,15 +619,6 @@ export default function CheckoutPage() {
                     onClick={() => setPayment("card")}
                   />
                 </div>
-                {payment === "card" && (
-                  <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--radius-md)] px-3 py-2">
-                    Тестовий режим WayForPay. Картка для тесту:{" "}
-                    <span className="font-mono">4444 5551 1111 6666</span>,{" "}
-                    <span className="font-mono">12/25</span>, CVV{" "}
-                    <span className="font-mono">123</span>. Реальні гроші не
-                    списуються.
-                  </p>
-                )}
               </FormGroup>
 
               {/* Group 4: Comment */}

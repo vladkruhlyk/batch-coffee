@@ -241,12 +241,16 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                     </h1>
                   </div>
 
-                  {/* RIGHT — copy + CTAs */}
+                  {/* RIGHT — copy + single CTA. Laconic: one button only.
+                      Copy renders only when filled, so the banner can be a
+                      clean kicker + title + button when left empty in Sanity. */}
                   <div className="lg:col-span-5 lg:pt-3 flex flex-col gap-5 sm:gap-6">
-                    <p className="text-[var(--color-text-secondary)] text-base lg:text-[16px] leading-relaxed max-w-md">
-                      {active.copy}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-5 md:gap-7">
+                    {active.copy && (
+                      <p className="text-[var(--color-text-secondary)] text-[15px] sm:text-base leading-relaxed max-w-sm">
+                        {active.copy}
+                      </p>
+                    )}
+                    <div>
                       <Link
                         href={active.ctaHref}
                         className="group inline-flex items-center gap-3 text-sm tracking-[0.12em] uppercase px-7 py-4 rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] transition-opacity duration-300 hover:opacity-85"
@@ -256,14 +260,6 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                           →
                         </span>
                       </Link>
-                      {active.secondaryLabel && active.secondaryHref && (
-                        <Link
-                          href={active.secondaryHref}
-                          className="inline-flex text-sm tracking-[0.12em] uppercase pb-1 border-b border-[var(--color-text-primary)]/25 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
-                        >
-                          {active.secondaryLabel}
-                        </Link>
-                      )}
                     </div>
                   </div>
                 </motion.div>

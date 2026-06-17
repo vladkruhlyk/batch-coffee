@@ -14,7 +14,7 @@ export function SearchButton() {
       type="button"
       aria-label="Пошук"
       onClick={openSearch}
-      className="p-2 hover:opacity-60 transition-opacity duration-300 hidden md:block"
+      className="p-2 hover:opacity-60 transition-opacity duration-300"
     >
       <Search className="w-5 h-5" strokeWidth={1.5} />
     </button>

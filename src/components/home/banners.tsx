@@ -90,7 +90,7 @@ export function HomeBanners({ banners }: HomeBannersProps) {
 
   return (
     <section
-      className="relative bg-[var(--color-bg-primary)] pt-28 lg:pt-32 pb-12 lg:pb-16"
+      className="relative bg-[var(--color-bg-primary)] pt-24 sm:pt-28 lg:pt-32 pb-8 sm:pb-12 lg:pb-16"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -98,12 +98,13 @@ export function HomeBanners({ banners }: HomeBannersProps) {
         <div className="overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-primary)]">
           {/* TOP — image. Crossfades between slides.
               Height is capped against the viewport (svh) so the whole card
-              — image + text + controls — still fits inside the first screen
-              on typical desktop heights, while the image gets enough
-              presence to read as a hero. clamp() floor keeps it readable
-              on short windows / tablets in landscape. */}
+              — image + text + controls — still fits inside the first screen.
+              Mobile gets a shorter image (controls now live ON the image, so
+              there's no external controls row eating height) → the entire
+              hero card is visible without scrolling on a phone. Desktop keeps
+              the taller cinematic frame. */}
           <div
-            className="relative w-full h-[clamp(280px,50svh,560px)]"
+            className="relative w-full h-[34svh] min-h-[220px] sm:h-[clamp(280px,50svh,560px)]"
             style={{ backgroundColor: active.fallbackBg }}
           >
             <AnimatePresence mode="sync">
@@ -156,6 +157,57 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                 {String(banners.length).padStart(2, "0")}
               </span>
             </span>
+
+            {banners.length > 1 && (
+              <>
+                {/* Soft bottom scrim so white controls stay legible over any
+                    photo, light or dark. */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent"
+                  aria-hidden
+                />
+                {/* Controls ON the image: progress dots bottom-left,
+                    prev/next arrows bottom-right. */}
+                <div className="absolute inset-x-5 bottom-4 lg:inset-x-7 lg:bottom-6 z-10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {banners.map((b, i) => (
+                      <button
+                        key={b.slug}
+                        onClick={() => go(i)}
+                        aria-label={`Слайд ${i + 1}`}
+                        className="group h-6 flex items-center"
+                      >
+                        <span
+                          className={cn(
+                            "block h-px bg-white transition-all duration-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]",
+                            i === index
+                              ? "w-9 opacity-100"
+                              : "w-4 opacity-50 group-hover:opacity-80 group-hover:w-6",
+                          )}
+                          aria-hidden
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => go(index - 1)}
+                      aria-label="Попередній слайд"
+                      className="h-9 w-9 lg:h-10 lg:w-10 rounded-full bg-white/85 backdrop-blur-md border border-white/60 flex items-center justify-center text-[var(--color-text-primary)] hover:bg-white transition-colors duration-300"
+                    >
+                      <ArrowLeft className="h-4 w-4" strokeWidth={1.6} />
+                    </button>
+                    <button
+                      onClick={() => go(index + 1)}
+                      aria-label="Наступний слайд"
+                      className="h-9 w-9 lg:h-10 lg:w-10 rounded-full bg-white/85 backdrop-blur-md border border-white/60 flex items-center justify-center text-[var(--color-text-primary)] hover:bg-white transition-colors duration-300"
+                    >
+                      <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* BOTTOM — text block. Cream surface. */}
@@ -168,7 +220,7 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.7, ease: EASING.smooth }}
-                  className="grid lg:grid-cols-12 gap-7 lg:gap-12 px-6 py-9 lg:px-12 lg:py-12"
+                  className="grid lg:grid-cols-12 gap-5 sm:gap-7 lg:gap-12 px-5 py-6 sm:px-6 sm:py-9 lg:px-12 lg:py-12"
                 >
                   {/* LEFT — kicker + headline */}
                   <div className="lg:col-span-7">
@@ -190,7 +242,7 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                   </div>
 
                   {/* RIGHT — copy + CTAs */}
-                  <div className="lg:col-span-5 lg:pt-3 flex flex-col gap-6">
+                  <div className="lg:col-span-5 lg:pt-3 flex flex-col gap-5 sm:gap-6">
                     <p className="text-[var(--color-text-secondary)] text-base lg:text-[16px] leading-relaxed max-w-md">
                       {active.copy}
                     </p>
@@ -217,46 +269,6 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                 </motion.div>
               </AnimatePresence>
             </Container>
-          </div>
-        </div>
-
-        {/* CONTROLS — outside the card, below */}
-        <div className="mt-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {banners.map((b, i) => (
-              <button
-                key={b.slug}
-                onClick={() => go(i)}
-                aria-label={`Слайд ${i + 1}`}
-                className="group h-6 flex items-center"
-              >
-                <span
-                  className={cn(
-                    "block h-px bg-[var(--color-text-primary)] transition-all duration-500",
-                    i === index
-                      ? "w-9 opacity-100"
-                      : "w-4 opacity-30 group-hover:opacity-60 group-hover:w-6",
-                  )}
-                  aria-hidden
-                />
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => go(index - 1)}
-              aria-label="Попередній слайд"
-              className="h-11 w-11 rounded-full border border-[var(--color-border-strong)] flex items-center justify-center text-[var(--color-text-primary)] hover:bg-[var(--color-text-primary)] hover:text-[var(--color-text-inverse)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={1.6} />
-            </button>
-            <button
-              onClick={() => go(index + 1)}
-              aria-label="Наступний слайд"
-              className="h-11 w-11 rounded-full border border-[var(--color-border-strong)] flex items-center justify-center text-[var(--color-text-primary)] hover:bg-[var(--color-text-primary)] hover:text-[var(--color-text-inverse)] hover:border-[var(--color-text-primary)] transition-colors duration-300"
-            >
-              <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
-            </button>
           </div>
         </div>
       </Container>

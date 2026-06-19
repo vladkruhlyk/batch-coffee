@@ -1,10 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { resolveOrderDiscount } from "@/lib/promo-server";
 import { resolveOrderPricing } from "@/lib/order-pricing";
+import { pushOrderToSheet } from "@/lib/google-sheets";
 
 /**
  * POST /api/orders/create
@@ -376,6 +377,40 @@ export async function POST(req: NextRequest) {
         );
       }
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+    }
+
+    // Cash-on-delivery / pickup orders are confirmed at creation (no online
+    // payment step), so push them to the Google Sheet now — with an EMPTY
+    // "paid at" so the merchant can see at a glance they're not paid yet.
+    // Card orders are NOT pushed here: they go to the sheet later from the
+    // WayForPay webhook, only once payment is actually approved (an
+    // abandoned card checkout shouldn't pollute the sheet). after() runs
+    // this AFTER the response is sent, so checkout latency is unaffected.
+    if (body.paymentMethod === "cod") {
+      const orderNumber = String(order.number ?? "");
+      after(async () => {
+        await pushOrderToSheet({
+          number: orderNumber,
+          paidAt: "", // pay on delivery — not paid yet
+          customer:
+            `${body.recipientFirstName} ${body.recipientLastName}`.trim(),
+          phone: body.recipientPhone.trim(),
+          email: body.recipientEmail ?? "",
+          items: body.items
+            .map((i) => `${i.productName} ${i.weightLabel} ×${i.quantity}`)
+            .join("; "),
+          total,
+          paymentMethod: "cod",
+          delivery: [
+            body.deliveryMethod,
+            body.deliveryCity,
+            body.deliveryAddress,
+          ]
+            .filter(Boolean)
+            .join(", "),
+          comment: body.comment ?? "",
+        });
+      });
     }
 
     return NextResponse.json({

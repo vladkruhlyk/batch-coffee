@@ -1,5 +1,6 @@
 import { freshClient } from "@/sanity/lib/client";
 import { WHOLESALE_DISCOUNT_PERCENT, WHOLESALE_MIN_KG } from "./wholesale";
+import { withRetry } from "./retry";
 
 /**
  * Server-side authoritative order pricing.
@@ -79,10 +80,14 @@ export async function resolveOrderPricing(
   // alone only controls Next's fetch cache, NOT Sanity's edge cache, and
   // charging against a minutes-stale CDN price after a price hike would
   // underbill. Money paths read the live API.
-  const rows = await freshClient.fetch<RawProduct[]>(
-    ORDER_PRICING_QUERY,
-    { slugs },
-    { next: { revalidate: 0 } },
+  // Retry: this is a live (uncached) Sanity call on every checkout, so a
+  // transient "fetch failed" must not kill the order — try a few times.
+  const rows = await withRetry(() =>
+    freshClient.fetch<RawProduct[]>(
+      ORDER_PRICING_QUERY,
+      { slugs },
+      { next: { revalidate: 0 } },
+    ),
   );
 
   // slug → (trimmed weightLabel → weights[]); slug → wholesalePerKg.

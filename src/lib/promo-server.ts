@@ -1,6 +1,7 @@
 import { freshClient } from "@/sanity/lib/client";
 import { PROMO_CODE_BY_CODE_QUERY } from "@/sanity/queries";
 import { discountFromSnapshot, type PromoSnapshot } from "./promo";
+import { withRetry } from "./retry";
 
 /**
  * Server-only promo resolution + validation. Imported by api/promo/validate
@@ -32,10 +33,12 @@ export async function resolvePromoRule(
   // working immediately — the CDN would otherwise serve the old rule for
   // minutes. revalidate:30 still caches repeat lookups in Next for 30s
   // (publish-to-live within ~30s, no hammering on hot codes).
-  const rule = await freshClient.fetch<PromoRule | null>(
-    PROMO_CODE_BY_CODE_QUERY,
-    { code },
-    { next: { revalidate: 30, tags: ["promoCode"] } },
+  const rule = await withRetry(() =>
+    freshClient.fetch<PromoRule | null>(
+      PROMO_CODE_BY_CODE_QUERY,
+      { code },
+      { next: { revalidate: 30, tags: ["promoCode"] } },
+    ),
   );
   return rule ?? null;
 }

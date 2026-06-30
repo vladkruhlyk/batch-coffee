@@ -419,13 +419,17 @@ export async function POST(req: NextRequest) {
       viewToken: order.view_token as string,
     });
   } catch (e) {
+    // Log the real cause server-side, but show the customer a friendly,
+    // retryable message — never a raw "TypeError: fetch failed". These
+    // fall here mostly on a transient upstream blip (Sanity/Supabase),
+    // which a retry usually clears.
     console.error("orders/create failed:", e);
     return NextResponse.json(
       {
         error:
-          e instanceof Error ? e.message : "internal error",
+          "Не вдалось оформити замовлення — сервіс на мить недоступний. Спробуй ще раз.",
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 }

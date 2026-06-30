@@ -14,6 +14,10 @@ import {
   refreshCartPrices,
 } from "@/lib/refresh-cart-prices";
 import { discountFromSnapshot, type PromoSnapshot } from "@/lib/promo";
+import {
+  NovaPoshtaPicker,
+  type NpSelection,
+} from "@/components/checkout/novaposhta-picker";
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
@@ -65,6 +69,13 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [comment, setComment] = useState("");
+  // Delivery: pickup, or a Nova Poshta branch/postomat. NP delivery is
+  // free on our side (the customer pays NP at pickup) — we just collect
+  // the city + warehouse so the merchant can ship.
+  const [delivery, setDelivery] = useState<
+    "pickup" | "novaposhta-branch" | "novaposhta-postomat"
+  >("pickup");
+  const [npSelection, setNpSelection] = useState<NpSelection | null>(null);
   const [payment, setPayment] = useState<"card" | "cod">("cod");
   const [agreed, setAgreed] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -184,11 +195,15 @@ export default function CheckoutPage() {
   const discount = discountFromSnapshot(promo, subtotal);
   const total = subtotal + deliveryFee - discount;
 
+  // Nova Poshta methods require a chosen city + warehouse.
+  const deliveryReady = delivery === "pickup" || npSelection !== null;
+
   const canSubmit =
     items.length > 0 &&
     firstName.trim() &&
     lastName.trim() &&
     normalizePhone(phone).length >= 8 &&
+    deliveryReady &&
     agreed &&
     !submitting;
 
@@ -251,9 +266,13 @@ export default function CheckoutPage() {
           recipientLastName: lastName.trim(),
           recipientPhone: normalizePhone(phone),
           recipientEmail: email.trim() || user?.email || null,
-          deliveryMethod: "pickup",
-          deliveryAddress: PICKUP_ADDRESS.line1,
-          deliveryCity: "Полтава",
+          deliveryMethod: delivery,
+          deliveryAddress:
+            delivery === "pickup"
+              ? PICKUP_ADDRESS.line1
+              : (npSelection?.warehouseDescription ?? ""),
+          deliveryCity:
+            delivery === "pickup" ? "Полтава" : (npSelection?.cityName ?? null),
           paymentMethod: payment,
           comment: comment.trim() || null,
           deliveryFee,
@@ -562,43 +581,63 @@ export default function CheckoutPage() {
                 <div className="grid sm:grid-cols-3 gap-3 mb-6">
                   <DeliveryOption
                     label="Самовивіз"
-                    sub="Київ · сьогодні"
-                    active
+                    sub="Полтава · сьогодні"
+                    active={delivery === "pickup"}
                     available
                     onClick={() => {
-                      /* only option right now */
+                      setDelivery("pickup");
+                      setNpSelection(null);
                     }}
                   />
                   <DeliveryOption
                     label="НП відділення"
-                    sub="Скоро"
-                    active={false}
-                    available={false}
+                    sub="За тарифами НП"
+                    active={delivery === "novaposhta-branch"}
+                    available
                     onClick={() => {
-                      /* disabled */
+                      setDelivery("novaposhta-branch");
+                      setNpSelection(null);
                     }}
                   />
                   <DeliveryOption
                     label="НП поштомат"
-                    sub="Скоро"
-                    active={false}
-                    available={false}
+                    sub="За тарифами НП"
+                    active={delivery === "novaposhta-postomat"}
+                    available
                     onClick={() => {
-                      /* disabled */
+                      setDelivery("novaposhta-postomat");
+                      setNpSelection(null);
                     }}
                   />
                 </div>
 
-                <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-secondary)] px-5 py-4 text-sm leading-relaxed">
-                  <p className="font-display font-semibold text-base">
-                    {PICKUP_ADDRESS.line1}
-                  </p>
-                  <p className="mt-1 text-[var(--color-text-secondary)]">
-                    {PICKUP_ADDRESS.hours} · Свіжообсмажене — зазвичай готове за
-                    1–2 години після оформлення.
-                  </p>
-                </div>
-
+                {delivery === "pickup" ? (
+                  <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-secondary)] px-5 py-4 text-sm leading-relaxed">
+                    <p className="font-display font-semibold text-base">
+                      {PICKUP_ADDRESS.line1}
+                    </p>
+                    <p className="mt-1 text-[var(--color-text-secondary)]">
+                      {PICKUP_ADDRESS.hours} · Свіжообсмажене — зазвичай готове
+                      за 1–2 години після оформлення.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <NovaPoshtaPicker
+                      key={delivery}
+                      type={
+                        delivery === "novaposhta-postomat"
+                          ? "postomat"
+                          : "branch"
+                      }
+                      onChange={setNpSelection}
+                    />
+                    <p className="text-[11px] tracking-[0.1em] text-[var(--color-text-muted)]">
+                      Доставка за тарифами Нової Пошти — оплачується при
+                      отриманні.
+                    </p>
+                  </div>
+                )}
               </FormGroup>
 
               {/* Group 3: Payment */}
@@ -771,10 +810,10 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-[var(--color-text-secondary)]">
-                      Самовивіз
+                      {delivery === "pickup" ? "Самовивіз" : "Нова Пошта"}
                     </dt>
                     <dd className="tabular-nums text-emerald-700">
-                      Безкоштовно
+                      {delivery === "pickup" ? "Безкоштовно" : "За тарифами НП"}
                     </dd>
                   </div>
                   {discount > 0 && promo && (

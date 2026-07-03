@@ -83,17 +83,29 @@ export async function sendSms(opts: SendSmsOptions): Promise<SendSmsResult> {
     signal: AbortSignal.timeout(8000),
   });
 
-  // 201 = success. SMS Club returns a JSON body either way.
-  const data = (await res.json().catch(() => ({}))) as {
+  // Read the raw body first — on errors SMS Club sometimes returns an
+  // HTML page (e.g. "Invalid Argument"), not JSON, so res.json() would
+  // throw and hide the real message. Parse JSON when we can, but always
+  // keep the raw text for diagnostics.
+  const rawText = await res.text();
+  let data: {
     status?: string;
     info?: Record<string, number>;
     errors?: Array<{ field: string; code: number; description: string }>;
-  };
+  } = {};
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    /* non-JSON (HTML error page) — handled below via rawText */
+  }
 
   if (!res.ok || data.status !== "success") {
     const detail =
       data.errors?.map((e) => `${e.field}: ${e.description}`).join("; ") ??
-      `HTTP ${res.status}`;
+      data.status ??
+      // Include a snippet of the raw body so the real SMS Club error
+      // (not just "HTTP 500") shows up in the Vercel log.
+      `HTTP ${res.status} — ${rawText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200)}`;
     throw new Error(`SMS Club send failed — ${detail}`);
   }
 

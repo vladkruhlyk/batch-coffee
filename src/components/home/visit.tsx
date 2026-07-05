@@ -10,13 +10,6 @@ import { EASING } from "@/lib/easing";
 
 const HOURS = [{ days: "Пн — Нд", time: "08:00 — 20:00" }];
 
-const POI = [
-  { label: "Від ЦУМу", value: "3 хв пішки" },
-  { label: "Паркінг", value: "Безкоштовно" },
-  { label: "Wi-Fi", value: "Так, швидкий" },
-  { label: "Власний посуд", value: "Знижка 10%" },
-];
-
 export function HomeVisit() {
   return (
     <section className="relative py-[var(--section-gap)] bg-[var(--color-bg-primary)] overflow-hidden">
@@ -85,22 +78,6 @@ export function HomeVisit() {
                 </div>
               </div>
             </Reveal>
-
-            {/* POI row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6 mt-8 lg:mt-10 pt-6 border-t border-[var(--color-border-default)]">
-              {POI.map((item, i) => (
-                <Reveal key={item.label} delay={0.1 + i * 0.07}>
-                  <div>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-[var(--color-text-muted)] block mb-1.5">
-                      {item.label}
-                    </span>
-                    <span className="font-display text-base tracking-tight">
-                      {item.value}
-                    </span>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
           </div>
 
           {/* Right — hours + CTA */}

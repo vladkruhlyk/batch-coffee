@@ -43,6 +43,14 @@ export const siteSettings = defineType({
       type: "image",
       description: "Картинка для шерінгу у соцмережах (1200×630).",
     }),
+    defineField({
+      name: "visitPhoto",
+      title: "Фото кав'ярні",
+      type: "image",
+      options: { hotspot: true },
+      description:
+        "Показується у секції «Кав'ярня» на сторінці /visit. Бажано горизонтальне (16:11).",
+    }),
 
     defineField({
       name: "contactPhone",

@@ -10,7 +10,7 @@ import { EASING } from "@/lib/easing";
 
 const HOURS = [{ days: "Пн — Нд", time: "08:00 — 20:00" }];
 
-export function HomeVisit() {
+export function HomeVisit({ imageUrl }: { imageUrl?: string }) {
   return (
     <section className="relative py-[var(--section-gap)] bg-[var(--color-bg-primary)] overflow-hidden">
       <Container size="wide" className="relative z-10">
@@ -41,16 +41,27 @@ export function HomeVisit() {
               <div className="relative aspect-[4/3] lg:aspect-[16/11] overflow-hidden rounded-[var(--radius-2xl)]">
                 <motion.div
                   aria-hidden
-                  className="absolute inset-0"
+                  className="absolute inset-0 bg-cover bg-center bg-no-repeat"
                   initial={{ scale: 1.14 }}
                   whileInView={{ scale: 1 }}
                   viewport={{ once: true, margin: "-15%" }}
                   transition={{ duration: 1.8, ease: EASING.expoOut }}
                   style={{
-                    backgroundImage:
-                      "radial-gradient(ellipse at 55% 50%, #D4A574 0%, #8B5A3C 45%, #3D2417 85%, #120806 100%)",
+                    // Real photo from Sanity when uploaded, otherwise the
+                    // warm gradient placeholder so the layout never breaks.
+                    backgroundImage: imageUrl
+                      ? `url(${imageUrl})`
+                      : "radial-gradient(ellipse at 55% 50%, #D4A574 0%, #8B5A3C 45%, #3D2417 85%, #120806 100%)",
                   }}
                 />
+                {/* Scrim so the overlaid white text stays legible on a
+                    photo (no effect on the gradient placeholder). */}
+                {imageUrl && (
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-black/20"
+                  />
+                )}
                 <div
                   aria-hidden
                   className="absolute inset-0 opacity-[0.1] mix-blend-overlay"

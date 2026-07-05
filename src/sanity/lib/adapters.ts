@@ -395,6 +395,7 @@ export interface SanitySiteSettings {
   promoBarText?: string;
   logoBlack?: SanityImage;
   logoWhite?: SanityImage;
+  visitPhoto?: SanityImage;
 }
 
 export interface SiteSettingsView {
@@ -410,6 +411,7 @@ export interface SiteSettingsView {
   promoBarText?: string;
   logoBlackUrl?: string;
   logoWhiteUrl?: string;
+  visitPhotoUrl?: string;
 }
 
 export function adaptSiteSettings(
@@ -430,5 +432,6 @@ export function adaptSiteSettings(
     promoBarText: s?.promoBarText,
     logoBlackUrl: s?.logoBlack?.url,
     logoWhiteUrl: s?.logoWhite?.url,
+    visitPhotoUrl: s?.visitPhoto?.url,
   };
 }

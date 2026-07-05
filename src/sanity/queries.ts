@@ -154,6 +154,7 @@ export const SITE_SETTINGS_QUERY = `
     "logoBlack": logoBlack{ "url": asset->url },
     "logoWhite": logoWhite{ "url": asset->url },
     "favicon": favicon{ "url": asset->url },
-    "ogImage": ogImage{ "url": asset->url }
+    "ogImage": ogImage{ "url": asset->url },
+    "visitPhoto": visitPhoto{ "url": asset->url }
   }
 `;

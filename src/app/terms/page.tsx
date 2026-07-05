@@ -131,7 +131,7 @@ const SECTIONS: LegalSection[] = [
     blocks: [
       {
         kind: "p",
-        text: "BATCH Coffee Roastery, ФОП Прізвище І.Б., м. Полтава, вул. Соборності, 27. Email: hello@batch.coffee. Телефон: +380 99 07 00 041.",
+        text: "BATCH Coffee Roastery, ФОП Прізвище І.Б., м. Полтава, вул. Соборності, 27. Email: hello@batch.coffee. Телефон: +380 50 070 0041.",
       },
     ],
   },

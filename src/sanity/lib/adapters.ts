@@ -420,7 +420,7 @@ export function adaptSiteSettings(
     description:
       s?.description ??
       "Свіжообсмажена спешиалті кава. Підписка, доставка по Україні.",
-    contactPhone: s?.contactPhone ?? "+380 99 07 00 041",
+    contactPhone: s?.contactPhone ?? "+380 50 070 0041",
     contactEmail: s?.contactEmail ?? "hello@batch.coffee",
     address: s?.address ?? "Полтава, вул. Соборності, 27",
     hours: s?.hours ?? "Пн–Нд · 08:00–20:00",

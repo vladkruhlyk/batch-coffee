@@ -8,10 +8,7 @@ import { Reveal } from "@/components/animations/reveal";
 import { Button } from "@/components/ui/button";
 import { EASING } from "@/lib/easing";
 
-const HOURS = [
-  { days: "Пн — Пт", time: "08:00 — 20:00" },
-  { days: "Сб — Нд", time: "09:00 — 21:00" },
-];
+const HOURS = [{ days: "Пн — Нд", time: "08:00 — 20:00" }];
 
 const POI = [
   { label: "Від ЦУМу", value: "3 хв пішки" },
@@ -80,7 +77,7 @@ export function HomeVisit() {
                 </div>
                 <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between text-white/90">
                   <span className="font-display font-medium text-3xl lg:text-5xl leading-[0.95] tracking-tight max-w-md">
-                    вул. Соборності, 12
+                    вул. Соборності, 27
                   </span>
                   <span className="text-[10px] tracking-[0.35em] uppercase text-white/50 hidden md:block">
                     Photo N°02

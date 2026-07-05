@@ -24,7 +24,7 @@ const client = createClient({
 const patch = {
   address: "Полтава, вул. Соборності, 27",
   hours: "Пн–Нд · 08:00–20:00",
-  contactPhone: "+380 99 07 00 041",
+  contactPhone: "+380 50 070 0041",
   instagram: "https://www.instagram.com/batch.coffee.roasters/",
 };
 

@@ -128,6 +128,11 @@ export function HomeBanners({ banners }: HomeBannersProps) {
                 ) : (
                   <PlaceholderArt tint={active.markTint} />
                 )}
+                {/* Brand splash mark — pinned top-right, ALWAYS present so the
+                    petal editors got used to survives once real photos land.
+                    Tinted over the gradient placeholder; a subtle white
+                    watermark over a photo so it never fights the image. */}
+                <SplashMark tint={active.markTint} overPhoto={!!active.image} />
               </motion.div>
             </AnimatePresence>
 
@@ -274,14 +279,9 @@ export function HomeBanners({ banners }: HomeBannersProps) {
 
 /**
  * Fallback art used while real banner photography hasn't been shot yet.
- * Same vibe as before — radial highlight + grain + splash mark — just
- * scoped into its own component so the new layout's image area can swap
- * cleanly to a real `<Image>` when assets land.
- *
- * The splash mark uses a motion wrapper that runs an entrance animation
- * (rotate + scale) on mount. Because the parent <AnimatePresence> in
- * `HomeBanners` keys the image layer on `active.slug`, this whole component
- * is re-mounted at each slide change — so the rotation replays every time.
+ * Radial highlight + grain. The petal itself now lives in `SplashMark`,
+ * rendered by the parent for BOTH the placeholder and real photos, so the
+ * brand mark stays in the corner even after an editor uploads an image.
  */
 function PlaceholderArt({ tint }: { tint: string }) {
   return (
@@ -301,32 +301,51 @@ function PlaceholderArt({ tint }: { tint: string }) {
             "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
         }}
       />
-      {/* Splash mark — animated on each slide enter (parent re-mounts us). */}
-      <motion.div
-        initial={{ rotate: -22, scale: 0.92, opacity: 0 }}
-        animate={{ rotate: 0, scale: 1, opacity: 0.32 }}
-        transition={{
-          rotate: { duration: 1.6, ease: EASING.smooth },
-          scale: { duration: 1.6, ease: EASING.smooth },
-          opacity: { duration: 1.1, ease: EASING.smooth },
-        }}
-        className="absolute -top-[10%] -right-[8%] w-[55%] max-w-[480px] aspect-square"
-        style={{
-          backgroundColor: tint,
-          WebkitMaskImage: "url(/5.png)",
-          maskImage: "url(/5.png)",
-          WebkitMaskRepeat: "no-repeat",
-          maskRepeat: "no-repeat",
-          WebkitMaskSize: "contain",
-          maskSize: "contain",
-          WebkitMaskPosition: "center",
-          maskPosition: "center",
-          // Pin the rotation around the visual center of the petals so the
-          // motion reads like it's spinning in place, not arcing off-screen.
-          transformOrigin: "55% 55%",
-        }}
-      />
     </div>
+  );
+}
+
+/**
+ * Brand splash mark — the masked "petal" shape (/5.png) pinned to the
+ * top-right of the image area. It animates in (rotate + scale) on each slide
+ * change because the parent's keyed motion.div re-mounts it.
+ *
+ * Two looks:
+ *  - over the gradient placeholder → the slide's tint at full presence, as
+ *    it always was;
+ *  - over a real photo → a soft white watermark (overlay blend) so the petal
+ *    stays visible on any photography without ever competing with it.
+ */
+function SplashMark({ tint, overPhoto }: { tint: string; overPhoto: boolean }) {
+  return (
+    <motion.div
+      aria-hidden
+      initial={{ rotate: -22, scale: 0.92, opacity: 0 }}
+      animate={{ rotate: 0, scale: 1, opacity: overPhoto ? 0.45 : 0.32 }}
+      transition={{
+        rotate: { duration: 1.6, ease: EASING.smooth },
+        scale: { duration: 1.6, ease: EASING.smooth },
+        opacity: { duration: 1.1, ease: EASING.smooth },
+      }}
+      className={cn(
+        "pointer-events-none absolute -top-[10%] -right-[8%] w-[55%] max-w-[480px] aspect-square",
+        overPhoto && "mix-blend-overlay",
+      )}
+      style={{
+        backgroundColor: overPhoto ? "#ffffff" : tint,
+        WebkitMaskImage: "url(/5.png)",
+        maskImage: "url(/5.png)",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        // Pin the rotation around the visual center of the petals so the
+        // motion reads like it's spinning in place, not arcing off-screen.
+        transformOrigin: "55% 55%",
+      }}
+    />
   );
 }
 

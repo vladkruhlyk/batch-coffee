@@ -21,12 +21,11 @@ import {
 import { formatPrice, cn } from "@/lib/utils";
 
 /**
- * Checkout page — пока работает только самовивіз + оплата при отриманні.
- *
- * НП-доставка (відділення / поштомат) и онлайн-оплата картой закрыты
- * плашкой «Тимчасово недоступно» — мы ждём API ключей от Нової Пошти
- * и LiqPay соответственно. Кнопки видны, но disabled, чтобы клиент
- * понимал что эти опции в работе.
+ * Checkout page — все опции доступны: самовивіз + доставка Новою Поштою
+ * (відділення / поштомат), оплата при отриманні + онлайн-оплата картой
+ * (WayForPay). Компонент `PaymentOption`/`DeliveryOption` всё ещё умеет
+ * рисовать disabled-состояние с замком (`available={false}`) — оставлено
+ * на случай, если какую-то опцию понадобится временно закрыть.
  *
  * Submit действительно создаёт row в `orders` + `order_items` через
  * Supabase (RLS гарантирует, что user_id = auth.uid()). После успеха
@@ -477,23 +476,6 @@ export default function CheckoutPage() {
               </Link>
             </div>
           )}
-
-          {/* Banner — explains why some options are locked */}
-          <div className="mb-6 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-secondary)] px-5 py-4 lg:px-6 lg:py-5 flex items-start gap-4">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-text-inverse)]">
-              <Lock className="h-4 w-4" strokeWidth={1.6} />
-            </span>
-            <div className="text-sm leading-relaxed">
-              <p className="font-display font-semibold text-base">
-                Запускаємо потроху
-              </p>
-              <p className="mt-1 text-[var(--color-text-secondary)]">
-                Поки що працює самовивіз і оплата при отриманні.
-                Доставку Новою Поштою та оплату карткою підключаємо найближчим
-                часом — побачиш як тільки вони стануть доступні.
-              </p>
-            </div>
-          </div>
 
           {/* Banner — surfaces cart price drift if Sanity has changed
               since the items were added. We update the cart silently

@@ -5,7 +5,11 @@ import {
 } from "@/lib/supabase/server";
 import { resolveOrderDiscount } from "@/lib/promo-server";
 import { resolveOrderPricing } from "@/lib/order-pricing";
-import { pushOrderToSheet } from "@/lib/google-sheets";
+import {
+  pushOrderToWebhook,
+  paymentLabel,
+  deliveryLabel,
+} from "@/lib/order-webhook";
 
 /**
  * POST /api/orders/create
@@ -380,18 +384,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Cash-on-delivery / pickup orders are confirmed at creation (no online
-    // payment step), so push them to the Google Sheet now — with an EMPTY
-    // "paid at" so the merchant can see at a glance they're not paid yet.
-    // Card orders are NOT pushed here: they go to the sheet later from the
-    // WayForPay webhook, only once payment is actually approved (an
-    // abandoned card checkout shouldn't pollute the sheet). after() runs
-    // this AFTER the response is sent, so checkout latency is unaffected.
+    // payment step), so push them to the webhook now — with "Оплачено: Ні"
+    // so the merchant can see at a glance they're not paid yet. Card orders
+    // are NOT pushed here: they go to the webhook later from the WayForPay
+    // callback, only once payment is actually approved (an abandoned card
+    // checkout shouldn't pollute the sheet). after() runs this AFTER the
+    // response is sent, so checkout latency is unaffected.
     if (body.paymentMethod === "cod") {
       const orderNumber = String(order.number ?? "");
       after(async () => {
-        await pushOrderToSheet({
+        await pushOrderToWebhook({
           number: orderNumber,
-          paidAt: "", // pay on delivery — not paid yet
+          paid: "Ні", // pay on delivery — not paid yet
           customer:
             `${body.recipientFirstName} ${body.recipientLastName}`.trim(),
           phone: body.recipientPhone.trim(),
@@ -400,14 +404,12 @@ export async function POST(req: NextRequest) {
             .map((i) => `${i.productName} ${i.weightLabel} ×${i.quantity}`)
             .join("; "),
           total,
-          paymentMethod: "cod",
-          delivery: [
+          payment: paymentLabel("cod"),
+          delivery: deliveryLabel(
             body.deliveryMethod,
             body.deliveryCity,
             body.deliveryAddress,
-          ]
-            .filter(Boolean)
-            .join(", "),
+          ),
           comment: body.comment ?? "",
         });
       });

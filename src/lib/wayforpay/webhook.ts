@@ -1,5 +1,9 @@
 import { createSupabaseAdminClient } from "../supabase/server";
-import { pushOrderToSheet } from "../google-sheets";
+import {
+  pushOrderToWebhook,
+  paymentLabel,
+  deliveryLabel,
+} from "../order-webhook";
 import { wayforpayMerchantSecret } from "./config";
 import {
   buildWebhookAck,
@@ -11,11 +15,11 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 /**
  * Build a flat row from a just-paid order + its items and push it to the
- * merchant's Google Sheet. Fire-and-forget at the call site already, and
- * pushOrderToSheet itself never throws — but we still guard the DB reads
+ * merchant's order webhook. Fire-and-forget at the call site already, and
+ * pushOrderToWebhook itself never throws — but we still guard the DB reads
  * here so a query hiccup can't bubble into the webhook ack.
  */
-async function pushPaidOrderToSheet(
+async function pushPaidOrderToWebhook(
   supabase: AdminClient,
   orderId: string,
 ): Promise<void> {
@@ -38,23 +42,25 @@ async function pushPaidOrderToSheet(
       .map((i) => `${i.product_name} ${i.weight_label} ×${i.quantity}`)
       .join("; ");
 
-    await pushOrderToSheet({
+    await pushOrderToWebhook({
       number: String(order.number ?? ""),
-      paidAt: new Date().toISOString(),
+      paid: "Так", // card order, payment approved
       customer:
         `${order.recipient_first_name ?? ""} ${order.recipient_last_name ?? ""}`.trim(),
       phone: order.recipient_phone ?? "",
       email: order.recipient_email ?? "",
       items: itemsStr,
       total: order.total ?? 0,
-      paymentMethod: order.payment_method ?? "",
-      delivery: [order.delivery_method, order.delivery_city, order.delivery_address]
-        .filter(Boolean)
-        .join(", "),
+      payment: paymentLabel(order.payment_method),
+      delivery: deliveryLabel(
+        order.delivery_method,
+        order.delivery_city,
+        order.delivery_address,
+      ),
       comment: order.comment ?? "",
     });
   } catch (err) {
-    console.error("pushPaidOrderToSheet failed (non-fatal):", err);
+    console.error("pushPaidOrderToWebhook failed (non-fatal):", err);
   }
 }
 
@@ -185,7 +191,7 @@ export async function handleWayForPayCallback(
     // pending → paid. On retries / duplicate webhooks it's empty, so the
     // Google Sheet gets exactly one row per order (no duplicates).
     if (flipped && flipped.length > 0) {
-      await pushPaidOrderToSheet(supabase, payment.order_id);
+      await pushPaidOrderToWebhook(supabase, payment.order_id);
     }
   }
 

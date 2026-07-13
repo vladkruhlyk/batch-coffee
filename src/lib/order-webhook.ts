@@ -78,7 +78,10 @@ export function deliveryLabel(
         : method === "pickup"
           ? "Самовивіз"
           : (method ?? "");
-  return [base, city, address].map((s) => s?.trim()).filter(Boolean).join(", ");
+  // Pickup's address already includes the city ("Полтава, вул. …"), so
+  // don't repeat the city for it — otherwise we get "…, Полтава, Полтава, …".
+  const parts = method === "pickup" ? [base, address] : [base, city, address];
+  return parts.map((s) => s?.trim()).filter(Boolean).join(", ");
 }
 
 /** "13.07.2026 14:22" in Kyiv time — the "Час" column. */
@@ -112,6 +115,71 @@ function webhookUrls(): string[] {
   return [...new Set(urls)];
 }
 
+/** Escape the five HTML-sensitive chars for Telegram parse_mode: "HTML". */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * A ready-to-read Telegram message, built from the order fields. Shipped in
+ * the webhook payload as `text` (so an intermediary bot can post `data.text`
+ * instead of the raw JSON) AND used by the native sender below.
+ */
+function formatTelegramMessage(row: OrderWebhookRow, time: string): string {
+  const paidMark = row.paid === "Так" ? "✅ оплачено" : "🕓 не оплачено";
+  return [
+    `🆕 <b>Замовлення ${escapeHtml(row.number)}</b>`,
+    `💳 ${escapeHtml(row.payment)} · ${paidMark}`,
+    ``,
+    `👤 ${escapeHtml(row.customer)}`,
+    `📞 ${escapeHtml(row.phone)}`,
+    row.email ? `✉️ ${escapeHtml(row.email)}` : null,
+    ``,
+    `🛒 ${escapeHtml(row.items)}`,
+    `💵 <b>${row.total} ₴</b>`,
+    `🚚 ${escapeHtml(row.delivery)}`,
+    row.comment ? `📝 ${escapeHtml(row.comment)}` : null,
+    ``,
+    `🕐 ${time}`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+/**
+ * Send a formatted message straight to a Telegram chat via the Bot API — no
+ * intermediary server needed. Off unless BOTH TELEGRAM_BOT_TOKEN and
+ * TELEGRAM_CHAT_ID are set. Never throws; own 5s timeout.
+ */
+async function sendTelegramMessage(text: string): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    console.error("sendTelegramMessage failed (non-fatal):", err);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** POST the body to one URL. Never throws; its own 5s timeout. */
 async function postOne(url: string, body: string): Promise<void> {
   const controller = new AbortController();
@@ -136,12 +204,20 @@ async function postOne(url: string, body: string): Promise<void> {
 
 export async function pushOrderToWebhook(row: OrderWebhookRow): Promise<void> {
   const urls = webhookUrls();
-  if (urls.length === 0) return; // feature off until an endpoint is wired
+  const telegramEnabled = Boolean(
+    process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID,
+  );
+  // Nothing wired at all → no-op.
+  if (urls.length === 0 && !telegramEnabled) return;
 
   const time = kyivTimestamp();
+  const text = formatTelegramMessage(row, time);
   const payload = {
     time,
     ...row,
+    // A ready-made human message — an intermediary bot can post this
+    // directly instead of dumping the raw JSON.
+    text,
     // Ordered exactly like the merchant's sheet columns.
     row: [
       time,
@@ -159,7 +235,11 @@ export async function pushOrderToWebhook(row: OrderWebhookRow): Promise<void> {
   };
   const body = JSON.stringify(payload);
 
-  // Fan out to every destination independently — the Sheet and the Telegram
-  // bot each get the same payload, and a failure of one can't affect the other.
-  await Promise.allSettled(urls.map((url) => postOne(url, body)));
+  // Fan out to every destination independently — the Sheet, any generic
+  // webhook, and the native Telegram send each run on their own, and a
+  // failure of one can't affect the others or the payment ack.
+  await Promise.allSettled([
+    ...urls.map((url) => postOne(url, body)),
+    sendTelegramMessage(text),
+  ]);
 }

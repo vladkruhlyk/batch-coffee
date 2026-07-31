@@ -59,9 +59,11 @@ interface Category {
   title: string;
   /** Destination route */
   href: string;
-  /** CSS `background-image` value — either a radial-gradient or a
-   *  `url(...)` to an uploaded image. */
+  /** CSS `background-image` value — the colored gradient behind the tile. */
   gradient: string;
+  /** Uploaded illustration (transparent PNG) used as the centered icon;
+   *  falls back to the built-in line-art when absent. */
+  iconUrl?: string;
 }
 
 interface HomeCategoriesProps {
@@ -126,13 +128,17 @@ function CategoryTile({ category, index }: TileProps) {
   // Stagger reveal left-to-right, then row-by-row.
   const delay = (index % 4) * 0.08;
 
+  // Prefer the uploaded illustration; fall back to the built-in line-art
+  // for any category that doesn't have one yet.
+  const iconSrc = category.iconUrl ?? illustrationFor(category.href);
+
   return (
     <Reveal delay={delay} y={30} duration={0.9}>
       <Link
         href={category.href}
         className="group relative block aspect-square overflow-hidden rounded-[var(--radius-xl)]"
       >
-        {/* Background — gradient + grain + subtle bottom darkening */}
+        {/* Background — colored gradient + grain + subtle bottom darkening */}
         <motion.div
           aria-hidden
           className="absolute inset-0"
@@ -159,20 +165,19 @@ function CategoryTile({ category, index }: TileProps) {
           />
         </motion.div>
 
-        {/* Line-art illustration — centred in the upper half so it
-            doesn't clash with the title pinned to the bottom. The art
-            is dark stroke; on dark tiles (e.g. Підписка) we invert it
-            to read light. Subtle float on hover. */}
-        {illustrationFor(category.href) && (
+        {/* Category illustration — the uploaded PNG (or built-in line-art
+            fallback), centred. The art is dark stroke; on dark gradient
+            tiles we invert it to read light. Subtle float on hover. */}
+        {iconSrc && (
           <motion.img
-            src={illustrationFor(category.href)!}
+            src={iconSrc}
             alt=""
             aria-hidden
             initial={{ y: 0 }}
             whileHover={{ y: -6 }}
             transition={{ duration: 0.9, ease: EASING.smooth }}
             className={cn(
-              "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[46%] max-w-[120px] opacity-90 transition-opacity duration-500 group-hover:opacity-100",
+              "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[54%] max-w-[170px] opacity-90 transition-opacity duration-500 group-hover:opacity-100",
               isDarkTile(category.gradient) && "[filter:invert(1)_brightness(1.4)]",
             )}
           />

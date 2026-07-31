@@ -60,7 +60,7 @@ export default async function BrewGuidePage() {
               >
                 {/* Top image area */}
                 <div
-                  className="relative aspect-[4/3] overflow-hidden"
+                  className="relative aspect-[4/3] overflow-hidden bg-cover bg-center bg-no-repeat"
                   style={{ backgroundImage: guide.gradient }}
                 >
                   <div

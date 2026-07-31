@@ -64,7 +64,7 @@ export default async function BrewMethodPage({ params }: PageProps) {
 
           {/* Hero card with gradient + name */}
           <div
-            className="relative overflow-hidden rounded-[var(--radius-2xl)] aspect-[16/9] lg:aspect-[21/9] mb-10 lg:mb-14"
+            className="relative overflow-hidden rounded-[var(--radius-2xl)] aspect-[16/9] lg:aspect-[21/9] mb-10 lg:mb-14 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: guide.gradient }}
           >
             <div
@@ -192,7 +192,7 @@ export default async function BrewMethodPage({ params }: PageProps) {
                   >
                     <span
                       aria-hidden
-                      className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)]"
+                      className="block h-12 w-12 shrink-0 rounded-[var(--radius-md)] bg-cover bg-center bg-no-repeat"
                       style={{ backgroundImage: g.gradient }}
                     />
                     <div className="min-w-0">

@@ -117,7 +117,7 @@ function JournalCard({ post, index }: PostProps) {
           >
             <div
               aria-hidden
-              className="absolute inset-0"
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{ backgroundImage: post.gradient }}
             />
             <div

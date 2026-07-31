@@ -204,8 +204,11 @@ export interface CategoryView {
   slug: string;
   title: string;
   href: string;
-  /** CSS background-image value — either a gradient or url(...) wrap. */
+  /** CSS background-image value — the colored gradient behind the tile. */
   gradient: string;
+  /** Uploaded illustration (transparent PNG) shown as the centered icon.
+   *  When absent, the tile falls back to the built-in line-art. */
+  iconUrl?: string;
 }
 
 export function adaptCategory(s: SanityCategory): CategoryView {
@@ -213,7 +216,12 @@ export function adaptCategory(s: SanityCategory): CategoryView {
     slug: s.href.replace(/[^a-z]/gi, "-").toLowerCase(),
     title: s.title,
     href: s.href,
-    gradient: imageOrGradient(s.image, s.gradient),
+    // Background is ALWAYS the colored gradient now. An uploaded image is
+    // used as the centered icon (iconUrl), not as the tile background.
+    gradient:
+      s.gradient ??
+      "radial-gradient(ellipse at 50% 50%, #EFE5D2 0%, #C9A87B 70%, #6B4225 100%)",
+    iconUrl: s.image?.url,
   };
 }
 

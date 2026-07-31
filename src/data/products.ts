@@ -53,7 +53,6 @@ export type CategoryKey =
 
 export const CATEGORIES: Array<{ key: CategoryKey; label: string }> = [
   { key: "beans", label: "Кава в зернах" },
-  { key: "ground", label: "Мелена кава" },
   { key: "drip", label: "Дріп-пакети" },
   { key: "capsules", label: "Капсули" },
   { key: "gear", label: "Аксесуари" },

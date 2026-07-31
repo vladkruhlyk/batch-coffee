@@ -46,7 +46,6 @@ export const product = defineType({
       options: {
         list: [
           { title: "Кава в зернах", value: "beans" },
-          { title: "Мелена кава", value: "ground" },
           { title: "Дріп-пакети", value: "drip" },
           { title: "Капсули", value: "capsules" },
           { title: "Аксесуари", value: "gear" },
